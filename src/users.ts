@@ -15,7 +15,7 @@ import { db } from "./firebase";
 const OWNER_EMAIL = "bielcosta3101@gmail.com";
 export const DEFAULT_COMPANY_ID = "rosa-atelie";
 
-export type UserRole = "admin" | "user" | "pending" | "blocked";
+export type UserRole = "superadmin" | "admin" | "user" | "pending" | "blocked";
 
 export type UserProfile = {
   uid: string;
@@ -31,18 +31,33 @@ export type UserProfile = {
 export async function ensureUserProfile(user: User): Promise<UserProfile> {
   const profileRef = doc(db, "users", user.uid);
   const accessRef = doc(db, "settings", "access");
+  const normalizedEmail = user.email?.trim().toLowerCase() || "";
+  const invitationRef = normalizedEmail ? doc(db, "companyInvites", normalizedEmail) : null;
 
   return runTransaction(db, async (transaction) => {
-    const [accessSnapshot, profileSnapshot] = await Promise.all([
+    const [accessSnapshot, profileSnapshot, invitationSnapshot] = await Promise.all([
       transaction.get(accessRef),
       transaction.get(profileRef),
+      invitationRef ? transaction.get(invitationRef) : Promise.resolve(null),
     ]);
     const existing = profileSnapshot.data() as UserProfile | undefined;
+    const invitation = invitationSnapshot?.data() as { companyId?: string; claimedBy?: string } | undefined;
     const canClaimOwnership = !accessSnapshot.exists()
       && user.emailVerified
-      && user.email?.toLowerCase() === OWNER_EMAIL;
-    const role: UserRole = canClaimOwnership ? "admin" : existing?.role ?? "pending";
-    const companyId = existing?.companyId || DEFAULT_COMPANY_ID;
+      && normalizedEmail === OWNER_EMAIL;
+    const isOwner = accessSnapshot.data()?.ownerUid === user.uid;
+    const canClaimInvitation = Boolean(invitation?.companyId)
+      && (!invitation?.claimedBy || invitation.claimedBy === user.uid);
+    const role: UserRole = canClaimOwnership || isOwner
+      ? "superadmin"
+      : canClaimInvitation
+        ? "admin"
+        : existing?.role ?? "pending";
+    const companyId = canClaimOwnership || isOwner
+      ? DEFAULT_COMPANY_ID
+      : canClaimInvitation
+        ? String(invitation?.companyId)
+        : existing?.companyId || DEFAULT_COMPANY_ID;
 
     if (canClaimOwnership) {
       transaction.set(accessRef, {
@@ -50,6 +65,13 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
         ownerEmail: OWNER_EMAIL,
         createdAt: serverTimestamp(),
       });
+    }
+
+    if (canClaimInvitation && invitationRef) {
+      transaction.set(invitationRef, {
+        claimedBy: user.uid,
+        claimedAt: serverTimestamp(),
+      }, { merge: true });
     }
 
     const profile = {
