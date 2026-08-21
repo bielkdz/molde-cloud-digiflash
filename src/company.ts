@@ -8,6 +8,7 @@ import {
   runTransaction,
   serverTimestamp,
   updateDoc,
+  writeBatch,
   where,
   type Timestamp,
 } from "firebase/firestore";
@@ -24,6 +25,7 @@ export type CompanyRecord = {
   oneDriveAccount?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  deletedAt?: Timestamp;
 };
 
 export function watchCompanies(
@@ -32,12 +34,16 @@ export function watchCompanies(
 ) {
   const companiesQuery = query(collection(db, "companies"), orderBy("createdAt", "desc"));
   return onSnapshot(companiesQuery, (snapshot) => {
-    onChange(snapshot.docs.map((item) => ({
+    const companies = snapshot.docs.map((item) => ({
       id: item.id,
       status: "active",
       adminEmail: "",
       ...item.data(),
-    }) as CompanyRecord));
+    }) as CompanyRecord);
+    const cutoff = Date.now() - REMOVED_COMPANY_RETENTION_MS;
+    const visible = companies.filter((company) => company.status !== "deleted" || (company.deletedAt?.toMillis() ?? Number.POSITIVE_INFINITY) > cutoff);
+    onChange(visible);
+    void purgeExpiredCompanies(companies).catch(() => onError?.("Não foi possível concluir a limpeza das empresas antigas."));
   }, () => onError?.("Não foi possível carregar as empresas."));
 }
 
@@ -121,6 +127,39 @@ export function restoreCompany(companyId: string) {
     restoredAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+const REMOVED_COMPANY_RETENTION_MS = 3 * 24 * 60 * 60 * 1000;
+const purgingCompanyIds = new Set<string>();
+
+export async function purgeExpiredCompanies(companies: CompanyRecord[]) {
+  const cutoff = Date.now() - REMOVED_COMPANY_RETENTION_MS;
+  const expired = companies.filter((company) => company.status === "deleted" && (company.deletedAt?.toMillis() ?? Number.POSITIVE_INFINITY) <= cutoff);
+
+  for (const company of expired) {
+    if (purgingCompanyIds.has(company.id)) continue;
+    purgingCompanyIds.add(company.id);
+    try {
+      const [invitations, users] = await Promise.all([
+        getDocs(query(collection(db, "companyInvites"), where("companyId", "==", company.id))),
+        getDocs(query(collection(db, "users"), where("companyId", "==", company.id))),
+      ]);
+      const batch = writeBatch(db);
+      invitations.docs.forEach((invitation) => batch.delete(invitation.ref));
+      users.docs.forEach((user) => batch.update(user.ref, {
+        role: "blocked",
+        companyId: "",
+        requestedRole: null,
+        companyReleasedAt: serverTimestamp(),
+      }));
+      batch.delete(doc(db, "companies", company.id));
+      await batch.commit();
+    } finally {
+      purgingCompanyIds.delete(company.id);
+    }
+  }
+
+  return expired.length;
 }
 
 export async function verifyCompanyOneDrive(companyId: string, role: UserRole, username: string, explicitConnection = false) {
