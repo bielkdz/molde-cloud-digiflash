@@ -1,6 +1,7 @@
 import type { User } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -28,6 +29,14 @@ export type UserProfile = {
   lastLogin?: Timestamp;
 };
 
+export type EmployeeInvitation = {
+  email: string;
+  companyId: string;
+  role: "pending";
+  createdAt?: Timestamp;
+  claimedBy?: string;
+};
+
 export async function ensureUserProfile(user: User): Promise<UserProfile> {
   const profileRef = doc(db, "users", user.uid);
   const accessRef = doc(db, "settings", "access");
@@ -41,17 +50,19 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
       invitationRef ? transaction.get(invitationRef) : Promise.resolve(null),
     ]);
     const existing = profileSnapshot.data() as UserProfile | undefined;
-    const invitation = invitationSnapshot?.data() as { companyId?: string; claimedBy?: string } | undefined;
+    const invitation = invitationSnapshot?.data() as { companyId?: string; role?: UserRole; claimedBy?: string } | undefined;
     const canClaimOwnership = !accessSnapshot.exists()
       && user.emailVerified
       && normalizedEmail === OWNER_EMAIL;
     const isOwner = accessSnapshot.data()?.ownerUid === user.uid;
     const canClaimInvitation = Boolean(invitation?.companyId)
-      && (!invitation?.claimedBy || invitation.claimedBy === user.uid);
+      && !invitation?.claimedBy
+      && (!existing || existing.role === "pending" || existing.role === "blocked");
+    const invitedRole: UserRole = invitation?.role === "admin" ? "admin" : "pending";
     const role: UserRole = canClaimOwnership || isOwner
       ? "superadmin"
       : canClaimInvitation
-        ? "admin"
+        ? invitedRole
         : existing?.role ?? "pending";
     const companyId = canClaimOwnership || isOwner
       ? DEFAULT_COMPANY_ID
@@ -104,4 +115,42 @@ export function watchAllUsers(companyId: string, onChange: (users: UserProfile[]
 
 export function changeUserRole(uid: string, role: UserRole, companyId: string) {
   return updateDoc(doc(db, "users", uid), { role, companyId });
+}
+
+export function watchEmployeeInvites(
+  companyId: string,
+  onChange: (invitations: EmployeeInvitation[]) => void,
+) {
+  const invitationsQuery = query(collection(db, "companyInvites"), where("companyId", "==", companyId));
+  return onSnapshot(invitationsQuery, (snapshot) => {
+    onChange(snapshot.docs
+      .map((item) => item.data() as EmployeeInvitation)
+      .filter((item) => item.role === "pending" && !item.claimedBy)
+      .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
+  });
+}
+
+export async function inviteEmployee(companyId: string, email: string, invitedBy: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error("Informe o e-mail do funcionário.");
+  if (normalizedEmail === OWNER_EMAIL) throw new Error("O administrador geral já possui acesso ao sistema.");
+  const invitationRef = doc(db, "companyInvites", normalizedEmail);
+
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(invitationRef);
+    if (snapshot.exists()) throw new Error("Este e-mail já possui vínculo ou convite com uma empresa.");
+    transaction.set(invitationRef, {
+      email: normalizedEmail,
+      companyId,
+      role: "pending",
+      invitedBy,
+      createdAt: serverTimestamp(),
+    });
+  });
+}
+
+export function cancelEmployeeInvite(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return Promise.resolve();
+  return deleteDoc(doc(db, "companyInvites", normalizedEmail));
 }

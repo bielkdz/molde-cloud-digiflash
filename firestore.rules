@@ -21,12 +21,13 @@ service cloud.firestore {
         && currentProfile().role in ["superadmin", "admin", "user"]
         && companyAllowed();
     }
-    function hasAdminInvitation(data) {
+    function hasInvitation(data) {
       return signedIn()
         && request.auth.token.email is string
         && exists(invitationPath(request.auth.token.email))
+        && get(invitationPath(request.auth.token.email)).data.email == request.auth.token.email
         && get(invitationPath(request.auth.token.email)).data.companyId == data.companyId
-        && data.role == "admin";
+        && get(invitationPath(request.auth.token.email)).data.role == data.role;
     }
     function sameCompany(data) {
       return isApproved() && "companyId" in data && data.companyId == currentCompany();
@@ -79,7 +80,7 @@ service cloud.firestore {
         && (
           (request.resource.data.companyId == "rosa-atelie" && request.resource.data.role == "pending")
           || isInitialOwnerClaim(uid)
-          || hasAdminInvitation(request.resource.data)
+          || hasInvitation(request.resource.data)
         );
       allow update: if isInitialOwnerClaim(uid)
         || (isSuperAdmin()
@@ -101,7 +102,7 @@ service cloud.firestore {
             || (isOwner(uid)
               && request.resource.data.role == "superadmin"
               && request.resource.data.companyId == "rosa-atelie")
-            || hasAdminInvitation(request.resource.data)
+            || hasInvitation(request.resource.data)
           ));
       allow delete: if (isSuperAdmin() || isCompanyAdmin())
         && !isOwner(uid)
@@ -129,8 +130,15 @@ service cloud.firestore {
 
     match /companyInvites/{email} {
       allow read: if isSuperAdmin()
-        || (signedIn() && request.auth.token.email == email);
-      allow create, delete: if isSuperAdmin();
+        || (signedIn() && request.auth.token.email == email)
+        || (isCompanyAdmin() && resource.data.companyId == currentCompany());
+      allow create: if isSuperAdmin()
+        || (isCompanyAdmin()
+          && request.resource.data.email == email
+          && request.resource.data.companyId == currentCompany()
+          && request.resource.data.role == "pending");
+      allow delete: if isSuperAdmin()
+        || (isCompanyAdmin() && resource.data.companyId == currentCompany());
       allow update: if isSuperAdmin()
         || (signedIn()
           && request.auth.token.email == email
