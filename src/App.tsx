@@ -66,7 +66,7 @@ function DashboardApp({user,profile,notice}:{user:User;profile:UserProfile;notic
  const visibleNav=profile.role==="admin"?[...nav,{id:"users" as Screen,label:"Usuários",icon:"users"}]:nav;
  const filtered=useMemo(()=>files.filter(x=>`${x.name} ${x.folderName}`.toLowerCase().includes(query.toLowerCase())),[files,query]);
  useEffect(()=>{const fail=(value:string)=>setMessage(value);const stopFolders=watchFolders(user.uid,setFolders,fail),stopFiles=watchFiles(user.uid,setFiles,fail),stopHistory=watchHistory(user.uid,setHistory,fail);return()=>{stopFolders();stopFiles();stopHistory()}},[user.uid]);
- useEffect(()=>{let active=true;void getOneDriveAccount().then(account=>{if(active)setOneDriveAccount(account?.name||account?.username||"")}).catch(()=>{if(active)setMessage("Não foi possível restaurar a conexão com o OneDrive.")});return()=>{active=false}},[]);
+ useEffect(()=>{let active=true;void getOneDriveAccount().then(account=>{if(active)setOneDriveAccount(account?.name||account?.username||"")}).catch(()=>{if(active)setMessage("Não foi possível restaurar a conexão com o OneDrive.")});return()=>{active=false}},[]);\n useEffect(()=>{if(!message||busy)return;const timer=window.setTimeout(()=>setMessage(""),5000);return()=>window.clearTimeout(timer)},[message,busy]);
  useEffect(()=>{if(!folders.some(item=>item.id===folderId))setFolderId(folders[0]?.id??"")},[folders,folderId]);
  useEffect(()=>()=>{if(photo)URL.revokeObjectURL(photo)},[photo]);
  function choosePhoto(file?:File){if(!file)return;if(photo)URL.revokeObjectURL(photo);setPhoto(URL.createObjectURL(file));setPhotoFile(file);if(!fileName)setFileName(file.name.replace(/\.[^/.]+$/, ""));}
