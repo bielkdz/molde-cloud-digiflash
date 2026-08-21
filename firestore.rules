@@ -2,20 +2,49 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
-    match /admins/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if false;
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function accessPath() { return /databases/$(database)/documents/settings/access; }
+    function isAdmin() {
+      return signedIn() && exists(userPath(request.auth.uid)) && get(userPath(request.auth.uid)).data.role == "admin";
+    }
+    function isApproved() {
+      return signedIn() && exists(userPath(request.auth.uid)) && get(userPath(request.auth.uid)).data.role in ["admin", "user"];
+    }
+    function isInitialOwnerClaim(uid) {
+      return signedIn()
+        && request.auth.uid == uid
+        && request.auth.token.email == "bielcosta3101@gmail.com"
+        && request.auth.token.email_verified == true
+        && !exists(accessPath())
+        && getAfter(accessPath()).data.ownerUid == uid
+        && getAfter(accessPath()).data.ownerEmail == "bielcosta3101@gmail.com"
+        && request.resource.data.role == "admin";
+    }
+    function isOwner(uid) {
+      return exists(accessPath()) && get(accessPath()).data.ownerUid == uid;
+    }
+    match /settings/access {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.auth.token.email == "bielcosta3101@gmail.com"
+        && request.auth.token.email_verified == true
+        && !exists(accessPath())
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == "bielcosta3101@gmail.com";
+      allow update, delete: if false;
     }
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.role == "pending";
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
-      allow delete: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid
+        && (request.resource.data.role == "pending" || isInitialOwnerClaim(uid));
+      allow update: if isInitialOwnerClaim(uid)
+        || (isAdmin() && (!isOwner(uid) || request.resource.data.role == "admin"))
+        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin() && !isOwner(uid);
     }
     match /history/{itemId} {
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if isAdmin() || (isApproved() && resource.data.userId == request.auth.uid);
     }
   }
 }
