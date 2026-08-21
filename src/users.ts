@@ -3,16 +3,17 @@ import {
   collection,
   doc,
   onSnapshot,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
   updateDoc,
+  where,
   type Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
 const OWNER_EMAIL = "bielcosta3101@gmail.com";
+export const DEFAULT_COMPANY_ID = "rosa-atelie";
 
 export type UserRole = "admin" | "user" | "pending" | "blocked";
 
@@ -22,6 +23,7 @@ export type UserProfile = {
   email: string;
   photoURL: string;
   role: UserRole;
+  companyId: string;
   createdAt?: Timestamp;
   lastLogin?: Timestamp;
 };
@@ -40,6 +42,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
       && user.emailVerified
       && user.email?.toLowerCase() === OWNER_EMAIL;
     const role: UserRole = canClaimOwnership ? "admin" : existing?.role ?? "pending";
+    const companyId = existing?.companyId || DEFAULT_COMPANY_ID;
 
     if (canClaimOwnership) {
       transaction.set(accessRef, {
@@ -55,6 +58,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
       email: user.email || existing?.email || "",
       photoURL: user.photoURL || existing?.photoURL || "",
       role,
+      companyId,
       lastLogin: serverTimestamp(),
       ...(profileSnapshot.exists() ? {} : { createdAt: serverTimestamp() }),
     };
@@ -69,13 +73,13 @@ export function watchUserProfile(uid: string, onChange: (profile: UserProfile) =
   });
 }
 
-export function watchAllUsers(onChange: (users: UserProfile[]) => void) {
-  const usersQuery = query(collection(db, "users"), orderBy("createdAt", "desc"));
+export function watchAllUsers(companyId: string, onChange: (users: UserProfile[]) => void) {
+  const usersQuery = query(collection(db, "users"), where("companyId", "==", companyId));
   return onSnapshot(usersQuery, (snapshot) => {
-    onChange(snapshot.docs.map((item) => item.data() as UserProfile));
+    onChange(snapshot.docs.map((item) => item.data() as UserProfile).sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
   });
 }
 
-export function changeUserRole(uid: string, role: UserRole) {
-  return updateDoc(doc(db, "users", uid), { role });
+export function changeUserRole(uid: string, role: UserRole, companyId: string) {
+  return updateDoc(doc(db, "users", uid), { role, companyId });
 }
