@@ -48,10 +48,22 @@ export async function getOneDriveAccount() {
 }
 
 export async function connectOneDrive() {
-  const client = await getClient();
-  // Redirect in the main window so the application itself cannot consume the
-  // OAuth response inside a popup before MSAL finishes the authentication.
-  await client.loginRedirect({ scopes, prompt: "select_account" });
+  let client = await getClient();
+  try {
+    // Redirect in the main window so the application itself cannot consume the
+    // OAuth response inside a popup before MSAL finishes the authentication.
+    await client.loginRedirect({ scopes, prompt: "select_account" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!message.includes("interaction_in_progress")) throw error;
+
+    // A failed popup can leave MSAL's interaction flag behind. Clear only this
+    // application's authentication cache and retry once without user action.
+    await client.clearCache();
+    clientPromise = null;
+    client = await getClient();
+    await client.loginRedirect({ scopes, prompt: "select_account" });
+  }
 }
 
 export async function disconnectOneDrive() {
@@ -138,13 +150,19 @@ export async function uploadPhotoToOneDrive(folderName: string, name: string, fi
 
 export function oneDriveErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
+  const code = typeof error === "object" && error && "errorCode" in error && typeof error.errorCode === "string"
+    ? error.errorCode
+    : "";
   if (message === "onedrive/not-configured") return "A integração Microsoft ainda precisa receber o ID do aplicativo.";
   if (message === "onedrive/not-connected") return "Conecte sua conta do OneDrive antes de enviar a foto.";
   if (message === "onedrive/file-too-large") return "A foto ultrapassa o limite de 250 MB para envio direto.";
   if (message.includes("user_cancelled") || message.includes("user_cancelled_login")) return "A conexão com o OneDrive foi cancelada.";
   if (message.includes("monitor_window_timeout") || message.includes("hash_empty_error")) return "A janela da Microsoft não devolveu a autorização. Atualize a página e conecte novamente.";
+  if (message.includes("interaction_in_progress")) return "Havia uma autorização antiga presa no navegador. Feche esta aba, abra o sistema novamente e conecte o OneDrive.";
   if (message.includes("unauthorized_client")) return "O aplicativo Microsoft não está habilitado para esta conta.";
   if (message.startsWith("onedrive/401:") || message.startsWith("onedrive/403:")) return "A Microsoft não autorizou o acesso aos arquivos. Conecte novamente.";
   if (message.startsWith("onedrive/507:")) return "O OneDrive está sem espaço disponível.";
-  return "Não foi possível concluir a operação no OneDrive. Tente novamente.";
+  return code
+    ? `Não foi possível concluir a operação no OneDrive. Código: ${code}.`
+    : "Não foi possível concluir a operação no OneDrive. Tente novamente.";
 }
