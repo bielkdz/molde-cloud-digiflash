@@ -12,6 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
+const OWNER_EMAIL = "bielcosta3101@gmail.com";
+
 export type UserRole = "admin" | "user" | "pending" | "blocked";
 
 export type UserProfile = {
@@ -34,13 +36,15 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
       transaction.get(profileRef),
     ]);
     const existing = profileSnapshot.data() as UserProfile | undefined;
-    const role: UserRole = accessSnapshot.exists()
-      ? existing?.role ?? "pending"
-      : "admin";
+    const canClaimOwnership = !accessSnapshot.exists()
+      && user.emailVerified
+      && user.email?.toLowerCase() === OWNER_EMAIL;
+    const role: UserRole = canClaimOwnership ? "admin" : existing?.role ?? "pending";
 
-    if (!accessSnapshot.exists()) {
+    if (canClaimOwnership) {
       transaction.set(accessRef, {
         ownerUid: user.uid,
+        ownerEmail: OWNER_EMAIL,
         createdAt: serverTimestamp(),
       });
     }
