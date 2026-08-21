@@ -1,0 +1,25 @@
+name: Publicar no Firebase
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"
+          channelId: live
+          projectId: moldes-cloud-digiflash
