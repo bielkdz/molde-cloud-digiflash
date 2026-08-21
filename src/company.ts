@@ -123,7 +123,7 @@ export function restoreCompany(companyId: string) {
   });
 }
 
-export async function verifyCompanyOneDrive(companyId: string, role: UserRole, username: string) {
+export async function verifyCompanyOneDrive(companyId: string, role: UserRole, username: string, explicitConnection = false) {
   const normalized = username.trim().toLowerCase();
   if (!normalized) return false;
   const companyRef = doc(db, "companies", companyId);
@@ -146,7 +146,7 @@ export async function verifyCompanyOneDrive(companyId: string, role: UserRole, u
     }
 
     if (!registered) {
-      if (role !== "admin" && role !== "superadmin") return false;
+      if (!explicitConnection || (role !== "admin" && role !== "superadmin")) return false;
       transaction.update(companyRef, {
         oneDriveAccount: normalized,
         updatedAt: serverTimestamp(),
@@ -155,6 +155,14 @@ export async function verifyCompanyOneDrive(companyId: string, role: UserRole, u
           adminEmail: "bielcosta3101@gmail.com",
           status: "active",
         } : {}),
+      });
+      return true;
+    }
+
+    if (explicitConnection && (role === "admin" || role === "superadmin") && registered !== normalized) {
+      transaction.update(companyRef, {
+        oneDriveAccount: normalized,
+        updatedAt: serverTimestamp(),
       });
       return true;
     }

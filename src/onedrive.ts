@@ -4,6 +4,7 @@ const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const rootFolderName = "Molde Cloud DigiFlash";
 const scopes = ["Files.ReadWrite", "User.Read"];
 const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() || "2ad90ac1-7b91-46a3-ba52-0093e1e7775e";
+const connectionIntentKey = "molde-cloud:onedrive-company";
 
 let clientPromise: Promise<PublicClientApplication> | null = null;
 
@@ -47,7 +48,16 @@ export async function getOneDriveAccount() {
   return client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
 }
 
-export async function connectOneDrive() {
+export function consumeOneDriveConnectionIntent(companyId: string) {
+  const intendedCompany = window.sessionStorage.getItem(connectionIntentKey);
+  window.sessionStorage.removeItem(connectionIntentKey);
+  return intendedCompany === companyId;
+}
+
+export async function connectOneDrive(companyId: string) {
+  // Only an explicit click may define or replace a company's official drive.
+  // A Microsoft account restored from browser cache must never claim a company.
+  window.sessionStorage.setItem(connectionIntentKey, companyId);
   let client = await getClient();
   try {
     // Redirect in the main window so the application itself cannot consume the
@@ -55,14 +65,22 @@ export async function connectOneDrive() {
     await client.loginRedirect({ scopes, prompt: "select_account" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    if (!message.includes("interaction_in_progress")) throw error;
+    if (!message.includes("interaction_in_progress")) {
+      window.sessionStorage.removeItem(connectionIntentKey);
+      throw error;
+    }
 
     // A failed popup can leave MSAL's interaction flag behind. Clear only this
     // application's authentication cache and retry once without user action.
     await client.clearCache();
     clientPromise = null;
     client = await getClient();
-    await client.loginRedirect({ scopes, prompt: "select_account" });
+    try {
+      await client.loginRedirect({ scopes, prompt: "select_account" });
+    } catch (retryError) {
+      window.sessionStorage.removeItem(connectionIntentKey);
+      throw retryError;
+    }
   }
 }
 
