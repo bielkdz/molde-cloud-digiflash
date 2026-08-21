@@ -13,8 +13,11 @@ service cloud.firestore {
     function isInitialOwnerClaim(uid) {
       return signedIn()
         && request.auth.uid == uid
+        && request.auth.token.email == "bielcosta3101@gmail.com"
+        && request.auth.token.email_verified == true
         && !exists(accessPath())
         && getAfter(accessPath()).data.ownerUid == uid
+        && getAfter(accessPath()).data.ownerEmail == "bielcosta3101@gmail.com"
         && request.resource.data.role == "admin";
     }
     function isOwner(uid) {
@@ -23,8 +26,11 @@ service cloud.firestore {
     match /settings/access {
       allow read: if signedIn();
       allow create: if signedIn()
+        && request.auth.token.email == "bielcosta3101@gmail.com"
+        && request.auth.token.email_verified == true
         && !exists(accessPath())
-        && request.resource.data.ownerUid == request.auth.uid;
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerEmail == "bielcosta3101@gmail.com";
       allow update, delete: if false;
     }
     match /users/{uid} {
