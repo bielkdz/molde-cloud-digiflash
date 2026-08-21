@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conectando ao OneDrive</title>
+  </head>
+  <body>
+    <p>Concluindo a conexão com o OneDrive...</p>
+    <script type="module">
+      import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge";
+
+      broadcastResponseToMainFrame().catch((error) => {
+        console.error("Não foi possível concluir a autenticação Microsoft:", error);
+      });
+    </script>
+  </body>
+</html>
