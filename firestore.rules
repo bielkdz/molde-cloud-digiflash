@@ -4,11 +4,30 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
     function accessPath() { return /databases/$(database)/documents/settings/access; }
+    function companyPath(companyId) { return /databases/$(database)/documents/companies/$(companyId); }
+    function invitationPath(email) { return /databases/$(database)/documents/companyInvites/$(email); }
     function hasProfile() { return signedIn() && exists(userPath(request.auth.uid)); }
     function currentProfile() { return get(userPath(request.auth.uid)).data; }
     function currentCompany() { return currentProfile().companyId; }
-    function isAdmin() { return hasProfile() && currentProfile().role == "admin"; }
-    function isApproved() { return hasProfile() && currentProfile().role in ["admin", "user"]; }
+    function isSuperAdmin() { return hasProfile() && currentProfile().role == "superadmin"; }
+    function isCompanyAdmin() { return hasProfile() && currentProfile().role == "admin"; }
+    function companyAllowed() {
+      return isSuperAdmin()
+        || !exists(companyPath(currentCompany()))
+        || get(companyPath(currentCompany())).data.status != "blocked";
+    }
+    function isApproved() {
+      return hasProfile()
+        && currentProfile().role in ["superadmin", "admin", "user"]
+        && companyAllowed();
+    }
+    function hasAdminInvitation(data) {
+      return signedIn()
+        && request.auth.token.email is string
+        && exists(invitationPath(request.auth.token.email))
+        && get(invitationPath(request.auth.token.email)).data.companyId == data.companyId
+        && data.role == "admin";
+    }
     function sameCompany(data) {
       return isApproved() && "companyId" in data && data.companyId == currentCompany();
     }
@@ -31,7 +50,7 @@ service cloud.firestore {
         && !exists(accessPath())
         && getAfter(accessPath()).data.ownerUid == uid
         && getAfter(accessPath()).data.ownerEmail == "bielcosta3101@gmail.com"
-        && request.resource.data.role == "admin"
+        && request.resource.data.role == "superadmin"
         && request.resource.data.companyId == "rosa-atelie";
     }
     function isOwner(uid) {
@@ -52,34 +71,71 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid
-        || (isAdmin() && "companyId" in resource.data && resource.data.companyId == currentCompany())
+        || isSuperAdmin()
+        || (isCompanyAdmin() && "companyId" in resource.data && resource.data.companyId == currentCompany())
       );
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.companyId == "rosa-atelie"
-        && (request.resource.data.role == "pending" || isInitialOwnerClaim(uid));
+        && (
+          (request.resource.data.companyId == "rosa-atelie" && request.resource.data.role == "pending")
+          || isInitialOwnerClaim(uid)
+          || hasAdminInvitation(request.resource.data)
+        );
       allow update: if isInitialOwnerClaim(uid)
-        || (isAdmin()
-          && (!isOwner(uid) || request.resource.data.role == "admin")
+        || (isSuperAdmin()
+          && (
+            (isOwner(uid) && request.resource.data.role == "superadmin")
+            || (!isOwner(uid) && request.resource.data.role != "superadmin")
+          ))
+        || (isCompanyAdmin()
+          && !isOwner(uid)
           && "companyId" in resource.data
           && resource.data.companyId == currentCompany()
-          && request.resource.data.companyId == currentCompany())
+          && request.resource.data.companyId == currentCompany()
+          && request.resource.data.role != "superadmin")
         || (signedIn()
           && request.auth.uid == uid
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.companyId == ("companyId" in resource.data ? resource.data.companyId : "rosa-atelie"));
-      allow delete: if isAdmin()
+          && (
+            (request.resource.data.role == resource.data.role
+              && request.resource.data.companyId == ("companyId" in resource.data ? resource.data.companyId : "rosa-atelie"))
+            || (isOwner(uid)
+              && request.resource.data.role == "superadmin"
+              && request.resource.data.companyId == "rosa-atelie")
+            || hasAdminInvitation(request.resource.data)
+          ));
+      allow delete: if (isSuperAdmin() || isCompanyAdmin())
         && !isOwner(uid)
         && "companyId" in resource.data
-        && resource.data.companyId == currentCompany();
+        && (isSuperAdmin() || resource.data.companyId == currentCompany());
     }
 
     match /companies/{companyId} {
-      allow read: if isApproved() && companyId == currentCompany();
-      allow create, update: if isAdmin()
-        && companyId == currentCompany()
-        && request.resource.data.oneDriveAccount is string;
+      allow read: if isSuperAdmin()
+        || (hasProfile() && companyId == currentCompany())
+        || (signedIn()
+          && request.auth.token.email is string
+          && resource.data.adminEmail == request.auth.token.email);
+      allow create: if isSuperAdmin()
+        && request.resource.data.name is string
+        && request.resource.data.adminEmail is string
+        && request.resource.data.status == "active";
+      allow update: if isSuperAdmin()
+        || (isCompanyAdmin()
+          && companyId == currentCompany()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["oneDriveAccount", "updatedAt"])
+          && request.resource.data.oneDriveAccount is string);
       allow delete: if false;
+    }
+
+    match /companyInvites/{email} {
+      allow read: if isSuperAdmin()
+        || (signedIn() && request.auth.token.email == email);
+      allow create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin()
+        || (signedIn()
+          && request.auth.token.email == email
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["claimedBy", "claimedAt"])
+          && request.resource.data.claimedBy == request.auth.uid);
     }
 
     match /history/{itemId} {
