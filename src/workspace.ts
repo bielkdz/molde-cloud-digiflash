@@ -13,7 +13,9 @@ import { db } from "./firebase";
 
 export type FolderRecord = {
   id: string;
+  companyId: string;
   userId: string;
+  createdByName?: string;
   name: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -21,7 +23,9 @@ export type FolderRecord = {
 
 export type FileRecord = {
   id: string;
+  companyId: string;
   userId: string;
+  createdByName?: string;
   folderId: string;
   folderName: string;
   name: string;
@@ -36,7 +40,9 @@ export type FileRecord = {
 
 export type HistoryRecord = {
   id: string;
+  companyId: string;
   userId: string;
+  actorName?: string;
   action: "folder_created" | "folder_renamed" | "folder_deleted" | "photo_registered" | "photo_uploaded";
   title: string;
   detail: string;
@@ -47,13 +53,15 @@ function timestampValue(value?: Timestamp) {
   return value?.toMillis() ?? 0;
 }
 
-function watchOwnedCollection<T extends { id: string; createdAt?: Timestamp }>(
+export type WorkspaceActor = { userId: string; companyId: string; name: string };
+
+function watchCompanyCollection<T extends { id: string; createdAt?: Timestamp }>(
   name: "folders" | "files" | "history",
-  userId: string,
+  companyId: string,
   onChange: (items: T[]) => void,
   onError: (message: string) => void,
 ) {
-  const ownedQuery = query(collection(db, name), where("userId", "==", userId));
+  const ownedQuery = query(collection(db, name), where("companyId", "==", companyId));
   return onSnapshot(
     ownedQuery,
     (snapshot) => {
@@ -66,69 +74,88 @@ function watchOwnedCollection<T extends { id: string; createdAt?: Timestamp }>(
   );
 }
 
-export function watchFolders(userId: string, onChange: (items: FolderRecord[]) => void, onError: (message: string) => void) {
-  return watchOwnedCollection<FolderRecord>("folders", userId, onChange, onError);
+export function watchFolders(companyId: string, onChange: (items: FolderRecord[]) => void, onError: (message: string) => void) {
+  return watchCompanyCollection<FolderRecord>("folders", companyId, onChange, onError);
 }
 
-export function watchFiles(userId: string, onChange: (items: FileRecord[]) => void, onError: (message: string) => void) {
-  return watchOwnedCollection<FileRecord>("files", userId, onChange, onError);
+export function watchFiles(companyId: string, onChange: (items: FileRecord[]) => void, onError: (message: string) => void) {
+  return watchCompanyCollection<FileRecord>("files", companyId, onChange, onError);
 }
 
-export function watchHistory(userId: string, onChange: (items: HistoryRecord[]) => void, onError: (message: string) => void) {
-  return watchOwnedCollection<HistoryRecord>("history", userId, onChange, onError);
+export function watchHistory(companyId: string, onChange: (items: HistoryRecord[]) => void, onError: (message: string) => void) {
+  return watchCompanyCollection<HistoryRecord>("history", companyId, onChange, onError);
 }
 
-export async function createFolder(userId: string, name: string) {
+export async function migrateLegacyWorkspace(userId: string, companyId: string) {
+  for (const name of ["folders", "files", "history"] as const) {
+    const snapshot = await getDocs(query(collection(db, name), where("userId", "==", userId)));
+    const legacy = snapshot.docs.filter((item) => !item.data().companyId);
+    if (!legacy.length) continue;
+    const batch = writeBatch(db);
+    legacy.forEach((item) => batch.update(item.ref, { companyId }));
+    await batch.commit();
+  }
+}
+
+export async function createFolder(actor: WorkspaceActor, name: string) {
   const batch = writeBatch(db);
   const folderRef = doc(collection(db, "folders"));
   const historyRef = doc(collection(db, "history"));
   batch.set(folderRef, {
-    userId,
+    companyId: actor.companyId,
+    userId: actor.userId,
+    createdByName: actor.name,
     name: name.trim(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
   batch.set(historyRef, {
-    userId,
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
     action: "folder_created",
     title: "Pasta criada",
-    detail: name.trim(),
+    detail: `${name.trim()} · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
 
-export async function renameFolder(userId: string, folder: FolderRecord, name: string) {
+export async function renameFolder(actor: WorkspaceActor, folder: FolderRecord, name: string) {
   const nextName = name.trim();
-  const filesSnapshot = await getDocs(query(collection(db, "files"), where("userId", "==", userId), where("folderId", "==", folder.id)));
+  const filesSnapshot = await getDocs(query(collection(db, "files"), where("companyId", "==", actor.companyId), where("folderId", "==", folder.id)));
   const batch = writeBatch(db);
   batch.update(doc(db, "folders", folder.id), { name: nextName, updatedAt: serverTimestamp() });
   filesSnapshot.docs.forEach((file) => batch.update(file.ref, { folderName: nextName }));
   batch.set(doc(collection(db, "history")), {
-    userId,
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
     action: "folder_renamed",
     title: "Pasta renomeada",
-    detail: `${folder.name} → ${nextName}`,
+    detail: `${folder.name} → ${nextName} · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
 
-export async function removeFolder(userId: string, folder: FolderRecord) {
+export async function removeFolder(actor: WorkspaceActor, folder: FolderRecord) {
   const batch = writeBatch(db);
   batch.delete(doc(db, "folders", folder.id));
   batch.set(doc(collection(db, "history")), {
-    userId,
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
     action: "folder_deleted",
     title: "Pasta excluída",
-    detail: folder.name,
+    detail: `${folder.name} · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
 
 export async function registerPhoto(
-  userId: string,
+  actor: WorkspaceActor,
   folder: FolderRecord,
   name: string,
   file: File,
@@ -136,7 +163,9 @@ export async function registerPhoto(
 ) {
   const batch = writeBatch(db);
   batch.set(doc(collection(db, "files")), {
-    userId,
+    companyId: actor.companyId,
+    userId: actor.userId,
+    createdByName: actor.name,
     folderId: folder.id,
     folderName: folder.name,
     name: oneDrive.name || name.trim(),
@@ -149,10 +178,12 @@ export async function registerPhoto(
     createdAt: serverTimestamp(),
   });
   batch.set(doc(collection(db, "history")), {
-    userId,
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
     action: "photo_uploaded",
     title: "Foto enviada ao OneDrive",
-    detail: `${oneDrive.name || name.trim()} · ${folder.name}`,
+    detail: `${oneDrive.name || name.trim()} · ${folder.name} · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
