@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "./firebase";
 
@@ -10,9 +10,26 @@ const recent=[{name:"frente_tamanho_M.jpg",folder:"Vestido longo",time:"Hoje, 14
 
 export default function App(){
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState("");
- useEffect(()=>onAuthStateChanged(auth,async(current)=>{setUser(current);setLoading(false);if(current){try{const ref=doc(db,"users",current.uid),snap=await getDoc(ref);await setDoc(ref,{name:current.displayName||"Usuário",email:current.email||"",photoURL:current.photoURL||"",role:snap.exists()?snap.data().role||"pending":"pending",lastLogin:serverTimestamp(),...(snap.exists()?{}:{createdAt:serverTimestamp()})},{merge:true})}catch{setError("Login realizado. Aguardando a liberação do banco de dados.")}}}),[]);
+ useEffect(()=>{
+  let unsubscribe=()=>{};
+  let active=true;
+  async function restoreLogin(){
+   try{
+    // Consuming the result is required when Google sends the browser back to
+    // the app. Only subscribe after this settles so the login screen does not
+    // flash between the redirect and Firebase restoring the current user.
+    await getRedirectResult(auth);
+   }catch{
+    if(active)setError("Não foi possível concluir o login do Google. Tente novamente.");
+   }
+   if(!active)return;
+   unsubscribe=onAuthStateChanged(auth,async(current)=>{setUser(current);setLoading(false);if(current){try{const ref=doc(db,"users",current.uid),snap=await getDoc(ref);await setDoc(ref,{name:current.displayName||"Usuário",email:current.email||"",photoURL:current.photoURL||"",role:snap.exists()?snap.data().role||"pending":"pending",lastLogin:serverTimestamp(),...(snap.exists()?{}:{createdAt:serverTimestamp()})},{merge:true})}catch{setError("Login realizado. Aguardando a liberação do banco de dados.")}}});
+  }
+  void restoreLogin();
+  return()=>{active=false;unsubscribe()};
+ },[]);
  if(loading)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
- if(!user)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><small>DIGIFLASH</small><h1>Molde Cloud</h1><p>Entre para acessar suas fotografias, pastas e histórico.</p>{error&&<div className="auth-error">{error}</div>}<button className="google-login" onClick={()=>signInWithPopup(auth,googleProvider).catch(()=>setError("Não foi possível abrir o login do Google."))}><b>G</b> Entrar com Google</button><span className="auth-note">Sua sessão permanecerá salva neste aparelho.</span></div></div>;
+ if(!user)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><small>DIGIFLASH</small><h1>Molde Cloud</h1><p>Entre para acessar suas fotografias, pastas e histórico.</p>{error&&<div className="auth-error">{error}</div>}<button className="google-login" onClick={()=>{setError("");void signInWithRedirect(auth,googleProvider).catch(()=>setError("Não foi possível abrir o login do Google."))}}><b>G</b> Entrar com Google</button><span className="auth-note">Sua sessão permanecerá salva neste aparelho.</span></div></div>;
  return <DashboardApp user={user} notice={error}/>;
 }
 
