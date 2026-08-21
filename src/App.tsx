@@ -25,16 +25,12 @@ export default function App(){
  useEffect(()=>{
   let unsubscribeAuth=()=>{},unsubscribeProfile=()=>{};
   let active=true;
-  unsubscribeAuth=onAuthStateChanged(auth,async(current)=>{
+  unsubscribeAuth=onAuthStateChanged(auth,current=>{
     unsubscribeProfile();setUser(current);setProfile(null);
     if(!current){setLoading(false);return}
-    try{
-     const initialProfile=await ensureUserProfile(current);
-     if(!active)return;
-     setProfile(initialProfile);
-     unsubscribeProfile=watchUserProfile(current.uid,setProfile);
-    }catch{setError("Login realizado, mas não foi possível carregar sua permissão.")}
-    finally{if(active)setLoading(false)}
+    setLoading(false);
+    unsubscribeProfile=watchUserProfile(current.uid,nextProfile=>{if(active)setProfile(nextProfile)});
+    void ensureUserProfile(current).then(initialProfile=>{if(active)setProfile(initialProfile)}).catch(()=>{if(active)setError("Login realizado, mas não foi possível carregar sua permissão.")});
    });
   return()=>{active=false;unsubscribeAuth();unsubscribeProfile()};
  },[]);
@@ -88,7 +84,7 @@ function DashboardApp({user,profile,notice}:{user:User;profile:UserProfile;notic
  async function installApp(){if(!installPrompt)return;await installPrompt.prompt();const choice=await installPrompt.userChoice;if(choice.outcome==="accepted")setInstallPrompt(null)}
  function navigateTo(next:Screen){setScreen(next);setCollapsed(true);setProfileOpen(false)}
  if((companyStatus==="blocked"||companyStatus==="deleted")&&profile.role!=="superadmin")return <AccessScreen title={companyStatus==="deleted"?"Empresa removida":"Empresa temporariamente bloqueada"} message="O administrador geral precisa reativar a empresa para liberar o acesso." user={user}/>;
- return <main className={`app-shell ${collapsed?"is-collapsed":""}`}>
+ return <main className={`app-shell app-enter ${collapsed?"is-collapsed":""}`}>
   <button className="mobile-menu" onClick={()=>setCollapsed(false)} aria-label="Abrir menu">☰</button>
   {!collapsed&&<button className="menu-overlay" onClick={()=>setCollapsed(true)} aria-label="Fechar menu"/>}
   <aside className="sidebar"><div className="brand"><span className="brand-mark">M</span><span className="brand-copy">Molde Cloud<small>DIGIFLASH</small></span></div><button className="collapse" onClick={()=>setCollapsed(!collapsed)} aria-label="Recolher menu">‹</button><nav>{visibleNav.map(x=><button key={x.id} className={screen===x.id?"active":""} onClick={()=>navigateTo(x.id)}><span className="nav-icon"><Icon name={x.icon}/></span><span className="nav-label">{x.label}</span></button>)}</nav>{installPrompt&&<button className="install-button" onClick={()=>void installApp()}><span className="nav-icon"><Icon name="desktop"/></span><span className="nav-label">Instalar aplicativo</span></button>}<button className={`onedrive-button ${oneDriveAccount?"connected":""}`} disabled={busy||!online} onClick={()=>void handleOneDrive()}><span className="nav-icon"><Icon name="cloud"/></span><span className="nav-label">{oneDriveAccount?"Trocar conta OneDrive":isOneDriveConfigured?"Conectar OneDrive":"Ativação pendente"}</span></button></aside>
