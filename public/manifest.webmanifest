@@ -1,0 +1,15 @@
+{
+  "name": "Molde Cloud DigiFlash",
+  "short_name": "Molde Cloud",
+  "description": "Fotografe, organize e envie arquivos da empresa para o OneDrive.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0e10",
+  "theme_color": "#0b0e10",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
