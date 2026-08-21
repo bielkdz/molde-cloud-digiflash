@@ -3,7 +3,7 @@ import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo
 const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const rootFolderName = "Molde Cloud DigiFlash";
 const scopes = ["Files.ReadWrite", "User.Read"];
-const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() || "f63271f9-6611-4e58-b99a-8f1fd10fcfd0";
+const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() || "2ad90ac1-7b91-46a3-ba52-0093e1e7775e";
 
 let clientPromise: Promise<PublicClientApplication> | null = null;
 
