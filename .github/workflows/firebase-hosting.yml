@@ -17,6 +17,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          VITE_MICROSOFT_CLIENT_ID: "${{ vars.VITE_MICROSOFT_CLIENT_ID }}"
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"

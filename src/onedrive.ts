@@ -1,0 +1,148 @@
+import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo } from "@azure/msal-browser";
+
+const graphBaseUrl = "https://graph.microsoft.com/v1.0";
+const rootFolderName = "Molde Cloud DigiFlash";
+const scopes = ["Files.ReadWrite", "User.Read"];
+const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() || "f63271f9-6611-4e58-b99a-8f1fd10fcfd0";
+
+let clientPromise: Promise<PublicClientApplication> | null = null;
+
+export type OneDriveUpload = {
+  id: string;
+  name: string;
+  size: number;
+  webUrl: string;
+};
+
+type DriveItem = OneDriveUpload & { folder?: { childCount?: number } };
+
+export const isOneDriveConfigured = Boolean(clientId);
+
+async function getClient() {
+  if (!clientId) throw new Error("onedrive/not-configured");
+  if (!clientPromise) {
+    clientPromise = (async () => {
+      const client = new PublicClientApplication({
+        auth: {
+          clientId,
+          authority: "https://login.microsoftonline.com/common",
+          redirectUri: `${window.location.origin}/`,
+          postLogoutRedirectUri: `${window.location.origin}/`,
+        },
+        cache: { cacheLocation: "localStorage" },
+      });
+      await client.initialize();
+      const redirectResult = await client.handleRedirectPromise();
+      const account = redirectResult?.account ?? client.getAllAccounts()[0] ?? null;
+      if (account) client.setActiveAccount(account);
+      return client;
+    })();
+  }
+  return clientPromise;
+}
+
+export async function getOneDriveAccount() {
+  if (!isOneDriveConfigured) return null;
+  const client = await getClient();
+  return client.getActiveAccount() ?? client.getAllAccounts()[0] ?? null;
+}
+
+export async function connectOneDrive() {
+  const client = await getClient();
+  const result = await client.loginPopup({ scopes, prompt: "select_account" });
+  client.setActiveAccount(result.account);
+  return result.account;
+}
+
+export async function disconnectOneDrive() {
+  const client = await getClient();
+  const account = client.getActiveAccount() ?? client.getAllAccounts()[0];
+  if (account) await client.logoutPopup({ account, mainWindowRedirectUri: `${window.location.origin}/` });
+}
+
+async function getAccessToken(account?: AccountInfo | null) {
+  const client = await getClient();
+  const selectedAccount = account ?? client.getActiveAccount() ?? client.getAllAccounts()[0];
+  if (!selectedAccount) throw new Error("onedrive/not-connected");
+  try {
+    return (await client.acquireTokenSilent({ scopes, account: selectedAccount })).accessToken;
+  } catch (error) {
+    if (!(error instanceof InteractionRequiredAuthError)) throw error;
+    return (await client.acquireTokenPopup({ scopes, account: selectedAccount })).accessToken;
+  }
+}
+
+async function graph<T>(path: string, init: RequestInit = {}) {
+  const token = await getAccessToken();
+  const response = await fetch(`${graphBaseUrl}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...init.headers },
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`onedrive/${response.status}:${detail}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+function safeName(value: string, fallback: string) {
+  const clean = value.replace(/["*:<>?/\\|]/g, "-").replace(/[. ]+$/g, "").trim();
+  return clean || fallback;
+}
+
+async function findByPath(path: string) {
+  const encodedPath = path.split("/").map((part) => encodeURIComponent(part)).join("/");
+  try {
+    return await graph<DriveItem>(`/me/drive/root:/${encodedPath}`);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("onedrive/404:")) return null;
+    throw error;
+  }
+}
+
+async function createFolder(parentId: string | null, name: string) {
+  const parentPath = parentId ? `/me/drive/items/${parentId}/children` : "/me/drive/root/children";
+  return graph<DriveItem>(parentPath, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+  });
+}
+
+async function ensureFolders(folderName: string) {
+  const safeFolder = safeName(folderName, "Sem pasta");
+  const root = (await findByPath(rootFolderName)) ?? await createFolder(null, rootFolderName);
+  const childPath = `${rootFolderName}/${safeFolder}`;
+  const child = (await findByPath(childPath)) ?? await createFolder(root.id, safeFolder);
+  return child;
+}
+
+function fileNameWithExtension(name: string, file: File) {
+  const safeBase = safeName(name, "foto");
+  if (/\.[a-z0-9]{2,5}$/i.test(safeBase)) return safeBase;
+  const originalExtension = file.name.match(/\.[a-z0-9]{2,5}$/i)?.[0];
+  const mimeExtension = file.type === "image/png" ? ".png" : ".jpg";
+  return `${safeBase}${originalExtension ?? mimeExtension}`;
+}
+
+export async function uploadPhotoToOneDrive(folderName: string, name: string, file: File) {
+  if (file.size > 250 * 1024 * 1024) throw new Error("onedrive/file-too-large");
+  const folder = await ensureFolders(folderName);
+  const uploadName = fileNameWithExtension(name, file);
+  return graph<OneDriveUpload>(`/me/drive/items/${folder.id}:/${encodeURIComponent(uploadName)}:/content`, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+}
+
+export function oneDriveErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "onedrive/not-configured") return "A integração Microsoft ainda precisa receber o ID do aplicativo.";
+  if (message === "onedrive/not-connected") return "Conecte sua conta do OneDrive antes de enviar a foto.";
+  if (message === "onedrive/file-too-large") return "A foto ultrapassa o limite de 250 MB para envio direto.";
+  if (message.includes("user_cancelled") || message.includes("user_cancelled_login")) return "A conexão com o OneDrive foi cancelada.";
+  if (message.startsWith("onedrive/401:") || message.startsWith("onedrive/403:")) return "A Microsoft não autorizou o acesso aos arquivos. Conecte novamente.";
+  if (message.startsWith("onedrive/507:")) return "O OneDrive está sem espaço disponível.";
+  return "Não foi possível concluir a operação no OneDrive. Tente novamente.";
+}

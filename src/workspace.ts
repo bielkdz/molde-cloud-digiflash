@@ -27,14 +27,17 @@ export type FileRecord = {
   name: string;
   size: number;
   mimeType: string;
-  status: "pending_onedrive";
+  status: "pending_onedrive" | "uploaded";
+  oneDriveItemId?: string;
+  oneDriveWebUrl?: string;
+  uploadedAt?: Timestamp;
   createdAt?: Timestamp;
 };
 
 export type HistoryRecord = {
   id: string;
   userId: string;
-  action: "folder_created" | "folder_renamed" | "folder_deleted" | "photo_registered";
+  action: "folder_created" | "folder_renamed" | "folder_deleted" | "photo_registered" | "photo_uploaded";
   title: string;
   detail: string;
   createdAt?: Timestamp;
@@ -124,23 +127,32 @@ export async function removeFolder(userId: string, folder: FolderRecord) {
   await batch.commit();
 }
 
-export async function registerPhoto(userId: string, folder: FolderRecord, name: string, file: File) {
+export async function registerPhoto(
+  userId: string,
+  folder: FolderRecord,
+  name: string,
+  file: File,
+  oneDrive: { id: string; webUrl: string; name: string; size: number },
+) {
   const batch = writeBatch(db);
   batch.set(doc(collection(db, "files")), {
     userId,
     folderId: folder.id,
     folderName: folder.name,
-    name: name.trim(),
-    size: file.size,
+    name: oneDrive.name || name.trim(),
+    size: oneDrive.size || file.size,
     mimeType: file.type || "image/jpeg",
-    status: "pending_onedrive",
+    status: "uploaded",
+    oneDriveItemId: oneDrive.id,
+    oneDriveWebUrl: oneDrive.webUrl,
+    uploadedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
   });
   batch.set(doc(collection(db, "history")), {
     userId,
-    action: "photo_registered",
-    title: "Foto registrada",
-    detail: `${name.trim()} · ${folder.name}`,
+    action: "photo_uploaded",
+    title: "Foto enviada ao OneDrive",
+    detail: `${oneDrive.name || name.trim()} · ${folder.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
