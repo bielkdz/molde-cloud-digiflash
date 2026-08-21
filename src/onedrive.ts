@@ -155,14 +155,33 @@ function fileNameWithExtension(name: string, file: File) {
   return `${safeBase}${originalExtension ?? mimeExtension}`;
 }
 
-export async function uploadPhotoToOneDrive(folderName: string, name: string, file: File) {
+export async function uploadPhotoToOneDrive(folderName: string, name: string, file: File, onProgress?: (percentage: number) => void) {
   if (file.size > 250 * 1024 * 1024) throw new Error("onedrive/file-too-large");
+  onProgress?.(5);
   const folder = await ensureFolders(folderName);
+  onProgress?.(12);
   const uploadName = fileNameWithExtension(name, file);
-  return graph<OneDriveUpload>(`/me/drive/items/${folder.id}:/${encodeURIComponent(uploadName)}:/content`, {
-    method: "PUT",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
-    body: file,
+  const token = await getAccessToken();
+  const url = `${graphBaseUrl}/me/drive/items/${folder.id}:/${encodeURIComponent(uploadName)}:/content`;
+  return new Promise<OneDriveUpload>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", url);
+    request.setRequestHeader("Authorization", `Bearer ${token}`);
+    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress?.(12 + Math.round((event.loaded / event.total) * 86));
+    });
+    request.addEventListener("load", () => {
+      if (request.status >= 200 && request.status < 300) {
+        onProgress?.(100);
+        resolve(JSON.parse(request.responseText) as OneDriveUpload);
+      } else {
+        reject(new Error(`onedrive/${request.status}:${request.responseText}`));
+      }
+    });
+    request.addEventListener("error", () => reject(new Error("onedrive/network-error")));
+    request.addEventListener("abort", () => reject(new Error("onedrive/upload-cancelled")));
+    request.send(file);
   });
 }
 
@@ -174,6 +193,7 @@ export function oneDriveErrorMessage(error: unknown) {
   if (message === "onedrive/not-configured") return "A integração Microsoft ainda precisa receber o ID do aplicativo.";
   if (message === "onedrive/not-connected") return "Conecte sua conta do OneDrive antes de enviar a foto.";
   if (message === "onedrive/file-too-large") return "A foto ultrapassa o limite de 250 MB para envio direto.";
+  if (message === "onedrive/network-error") return "A internet caiu durante o envio. A foto não foi registrada; tente novamente quando a conexão voltar.";
   if (message.includes("user_cancelled") || message.includes("user_cancelled_login")) return "A conexão com o OneDrive foi cancelada.";
   if (message.includes("monitor_window_timeout") || message.includes("hash_empty_error")) return "A janela da Microsoft não devolveu a autorização. Atualize a página e conecte novamente.";
   if (message.includes("interaction_in_progress")) return "Havia uma autorização antiga presa no navegador. Feche esta aba, abra o sistema novamente e conecte o OneDrive.";
