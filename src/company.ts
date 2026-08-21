@@ -14,7 +14,7 @@ import {
 import { db } from "./firebase";
 import type { UserRole } from "./users";
 
-export type CompanyStatus = "active" | "blocked";
+export type CompanyStatus = "active" | "blocked" | "deleted";
 
 export type CompanyRecord = {
   id: string;
@@ -97,6 +97,23 @@ export async function createCompany(name: string, adminEmail: string, createdBy:
 export function setCompanyStatus(companyId: string, status: CompanyStatus) {
   return updateDoc(doc(db, "companies", companyId), {
     status,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export function removeCompany(companyId: string, deletedBy: string) {
+  return updateDoc(doc(db, "companies", companyId), {
+    status: "deleted",
+    deletedBy,
+    deletedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export function restoreCompany(companyId: string) {
+  return updateDoc(doc(db, "companies", companyId), {
+    status: "active",
+    restoredAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
