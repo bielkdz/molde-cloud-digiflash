@@ -89,7 +89,12 @@ export async function createCompany(name: string, adminEmail: string, createdBy:
 
   const registeredUsers = await getDocs(query(collection(db, "users"), where("email", "==", normalizedEmail)));
   await Promise.all(registeredUsers.docs.map(async (userSnapshot) => {
-    await updateDoc(userSnapshot.ref, { companyId: companyRef.id, role: "admin" });
+    await updateDoc(userSnapshot.ref, {
+      companyId: companyRef.id,
+      role: "admin",
+      approvedBy: createdBy,
+      approvedAt: serverTimestamp(),
+    });
     await updateDoc(invitationRef, { claimedBy: userSnapshot.id, claimedAt: serverTimestamp() });
   }));
 }
