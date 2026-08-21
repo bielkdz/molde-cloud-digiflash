@@ -4,11 +4,24 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
     function accessPath() { return /databases/$(database)/documents/settings/access; }
-    function isAdmin() {
-      return signedIn() && exists(userPath(request.auth.uid)) && get(userPath(request.auth.uid)).data.role == "admin";
+    function hasProfile() { return signedIn() && exists(userPath(request.auth.uid)); }
+    function currentProfile() { return get(userPath(request.auth.uid)).data; }
+    function currentCompany() { return currentProfile().companyId; }
+    function isAdmin() { return hasProfile() && currentProfile().role == "admin"; }
+    function isApproved() { return hasProfile() && currentProfile().role in ["admin", "user"]; }
+    function sameCompany(data) {
+      return isApproved() && "companyId" in data && data.companyId == currentCompany();
     }
-    function isApproved() {
-      return signedIn() && exists(userPath(request.auth.uid)) && get(userPath(request.auth.uid)).data.role in ["admin", "user"];
+    function legacyOwned(data) {
+      return isApproved() && !("companyId" in data) && data.userId == request.auth.uid;
+    }
+    function validCompanyWrite(data) {
+      return isApproved() && data.companyId == currentCompany() && data.userId == request.auth.uid;
+    }
+    function isLegacyMigration() {
+      return legacyOwned(resource.data)
+        && request.resource.data.companyId == currentCompany()
+        && request.resource.data.userId == request.auth.uid;
     }
     function isInitialOwnerClaim(uid) {
       return signedIn()
@@ -18,11 +31,13 @@ service cloud.firestore {
         && !exists(accessPath())
         && getAfter(accessPath()).data.ownerUid == uid
         && getAfter(accessPath()).data.ownerEmail == "bielcosta3101@gmail.com"
-        && request.resource.data.role == "admin";
+        && request.resource.data.role == "admin"
+        && request.resource.data.companyId == "rosa-atelie";
     }
     function isOwner(uid) {
       return exists(accessPath()) && get(accessPath()).data.ownerUid == uid;
     }
+
     match /settings/access {
       allow read: if signedIn();
       allow create: if signedIn()
@@ -33,33 +48,61 @@ service cloud.firestore {
         && request.resource.data.ownerEmail == "bielcosta3101@gmail.com";
       allow update, delete: if false;
     }
+
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if signedIn() && request.auth.uid == uid
+      allow read: if signedIn() && (
+        request.auth.uid == uid
+        || (isAdmin() && "companyId" in resource.data && resource.data.companyId == currentCompany())
+      );
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.companyId == "rosa-atelie"
         && (request.resource.data.role == "pending" || isInitialOwnerClaim(uid));
       allow update: if isInitialOwnerClaim(uid)
-        || (isAdmin() && (!isOwner(uid) || request.resource.data.role == "admin"))
-        || (signedIn() && request.auth.uid == uid && request.resource.data.role == resource.data.role);
-      allow delete: if isAdmin() && !isOwner(uid);
+        || (isAdmin()
+          && (!isOwner(uid) || request.resource.data.role == "admin")
+          && "companyId" in resource.data
+          && resource.data.companyId == currentCompany()
+          && request.resource.data.companyId == currentCompany())
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.companyId == ("companyId" in resource.data ? resource.data.companyId : "rosa-atelie"));
+      allow delete: if isAdmin()
+        && !isOwner(uid)
+        && "companyId" in resource.data
+        && resource.data.companyId == currentCompany();
     }
+
+    match /companies/{companyId} {
+      allow read: if isApproved() && companyId == currentCompany();
+      allow create, update: if isAdmin()
+        && companyId == currentCompany()
+        && request.resource.data.oneDriveAccount is string;
+      allow delete: if false;
+    }
+
     match /history/{itemId} {
-      allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
-      allow read: if isApproved() && resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow create: if validCompanyWrite(request.resource.data);
+      allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
+      allow update: if isLegacyMigration();
+      allow delete: if false;
     }
+
     match /folders/{folderId} {
-      allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
-      allow read, delete: if isApproved() && resource.data.userId == request.auth.uid;
-      allow update: if isApproved()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == request.auth.uid;
+      allow create: if validCompanyWrite(request.resource.data);
+      allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
+      allow update: if isLegacyMigration()
+        || (sameCompany(resource.data) && request.resource.data.companyId == currentCompany());
+      allow delete: if sameCompany(resource.data) || legacyOwned(resource.data);
     }
+
     match /files/{fileId} {
-      allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
-      allow read, delete: if isApproved() && resource.data.userId == request.auth.uid;
-      allow update: if isApproved()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == request.auth.uid;
+      allow create: if validCompanyWrite(request.resource.data);
+      allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
+      allow update: if isLegacyMigration()
+        || (sameCompany(resource.data) && request.resource.data.companyId == currentCompany());
+      allow delete: if sameCompany(resource.data) || legacyOwned(resource.data);
     }
   }
 }
