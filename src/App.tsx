@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import {
  createUserWithEmailAndPassword,
- getRedirectResult,
  onAuthStateChanged,
  reload,
  sendEmailVerification,
@@ -24,17 +23,7 @@ export default function App(){
  useEffect(()=>{
   let unsubscribeAuth=()=>{},unsubscribeProfile=()=>{};
   let active=true;
-  async function restoreLogin(){
-   try{
-    // Consuming the result is required when Google sends the browser back to
-    // the app. Only subscribe after this settles so the login screen does not
-    // flash between the redirect and Firebase restoring the current user.
-    await getRedirectResult(auth);
-   }catch{
-    if(active)setError("Não foi possível concluir o login do Google. Tente novamente.");
-   }
-   if(!active)return;
-   unsubscribeAuth=onAuthStateChanged(auth,async(current)=>{
+  unsubscribeAuth=onAuthStateChanged(auth,async(current)=>{
     unsubscribeProfile();setUser(current);setProfile(null);
     if(!current){setLoading(false);return}
     try{
@@ -45,8 +34,6 @@ export default function App(){
     }catch{setError("Login realizado, mas não foi possível carregar sua permissão.")}
     finally{if(active)setLoading(false)}
    });
-  }
-  void restoreLogin();
   return()=>{active=false;unsubscribeAuth();unsubscribeProfile()};
  },[]);
  if(loading)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
