@@ -25,6 +25,9 @@ export type UserProfile = {
   photoURL: string;
   role: UserRole;
   companyId: string;
+  requestedRole?: "admin" | "user";
+  approvedAt?: Timestamp;
+  approvedBy?: string;
   createdAt?: Timestamp;
   lastLogin?: Timestamp;
 };
@@ -58,11 +61,17 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     const canClaimInvitation = Boolean(invitation?.companyId)
       && !invitation?.claimedBy
       && (!existing || existing.role === "pending" || existing.role === "blocked");
-    const invitedRole: UserRole = invitation?.role === "admin" ? "admin" : "pending";
+    const needsManualApproval = existing?.role === "admin"
+      && !user.emailVerified
+      && invitation?.claimedBy === user.uid
+      && !existing.approvedAt;
+    const requestedRole: "admin" | "user" = invitation?.role === "admin" ? "admin" : "user";
     const role: UserRole = canClaimOwnership || isOwner
       ? "superadmin"
       : canClaimInvitation
-        ? invitedRole
+        ? "pending"
+        : needsManualApproval
+          ? "pending"
         : existing?.role ?? "pending";
     const companyId = canClaimOwnership || isOwner
       ? DEFAULT_COMPANY_ID
@@ -92,6 +101,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
       photoURL: user.photoURL || existing?.photoURL || "",
       role,
       companyId,
+      ...(canClaimInvitation || needsManualApproval ? { requestedRole } : {}),
       lastLogin: serverTimestamp(),
       ...(profileSnapshot.exists() ? {} : { createdAt: serverTimestamp() }),
     };
@@ -113,8 +123,25 @@ export function watchAllUsers(companyId: string, onChange: (users: UserProfile[]
   });
 }
 
-export function changeUserRole(uid: string, role: UserRole, companyId: string) {
-  return updateDoc(doc(db, "users", uid), { role, companyId });
+export function changeUserRole(uid: string, role: UserRole, companyId: string, approvedBy?: string) {
+  return updateDoc(doc(db, "users", uid), {
+    role,
+    companyId,
+    ...(role !== "pending" ? { requestedRole: null } : {}),
+    ...(role === "admin" || role === "user" ? {
+      approvedAt: serverTimestamp(),
+      approvedBy: approvedBy || "administrator",
+    } : {}),
+  });
+}
+
+export function watchPendingApprovals(onChange: (users: UserProfile[]) => void) {
+  const pendingQuery = query(collection(db, "users"), where("role", "==", "pending"));
+  return onSnapshot(pendingQuery, (snapshot) => {
+    onChange(snapshot.docs
+      .map((item) => item.data() as UserProfile)
+      .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0)));
+  });
 }
 
 export function watchEmployeeInvites(
