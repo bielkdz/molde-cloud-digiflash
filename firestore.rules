@@ -28,7 +28,8 @@ service cloud.firestore {
         && exists(invitationPath(request.auth.token.email))
         && get(invitationPath(request.auth.token.email)).data.email == request.auth.token.email
         && get(invitationPath(request.auth.token.email)).data.companyId == data.companyId
-        && get(invitationPath(request.auth.token.email)).data.role == data.role;
+        && data.role == "pending"
+        && data.requestedRole == (get(invitationPath(request.auth.token.email)).data.role == "admin" ? "admin" : "user");
     }
     function sameCompany(data) {
       return isApproved() && "companyId" in data && data.companyId == currentCompany();
