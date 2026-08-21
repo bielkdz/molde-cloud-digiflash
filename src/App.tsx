@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { getRedirectResult, onAuthStateChanged, signInWithRedirect, signOut } from "firebase/auth";
+import { getRedirectResult, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "./firebase";
 
@@ -29,7 +29,7 @@ export default function App(){
   return()=>{active=false;unsubscribe()};
  },[]);
  if(loading)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
- if(!user)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><small>DIGIFLASH</small><h1>Molde Cloud</h1><p>Entre para acessar suas fotografias, pastas e histórico.</p>{error&&<div className="auth-error">{error}</div>}<button className="google-login" onClick={()=>{setError("");void signInWithRedirect(auth,googleProvider).catch(()=>setError("Não foi possível abrir o login do Google."))}}><b>G</b> Entrar com Google</button><span className="auth-note">Sua sessão permanecerá salva neste aparelho.</span></div></div>;
+ if(!user)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><small>DIGIFLASH</small><h1>Molde Cloud</h1><p>Entre para acessar suas fotografias, pastas e histórico.</p>{error&&<div className="auth-error">{error}</div>}<button className="google-login" onClick={()=>{setError("");void signInWithPopup(auth,googleProvider).catch(()=>setError("Não foi possível abrir o login do Google."))}}><b>G</b> Entrar com Google</button><span className="auth-note">Sua sessão permanecerá salva neste aparelho.</span></div></div>;
  return <DashboardApp user={user} notice={error}/>;
 }
 
