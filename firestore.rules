@@ -44,7 +44,22 @@ service cloud.firestore {
     }
     match /history/{itemId} {
       allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if isAdmin() || (isApproved() && resource.data.userId == request.auth.uid);
+      allow read: if isApproved() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+    match /folders/{folderId} {
+      allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isApproved() && resource.data.userId == request.auth.uid;
+      allow update: if isApproved()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+    }
+    match /files/{fileId} {
+      allow create: if isApproved() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isApproved() && resource.data.userId == request.auth.uid;
+      allow update: if isApproved()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
     }
   }
 }
