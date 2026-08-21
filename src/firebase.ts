@@ -9,7 +9,7 @@ import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD2PFuASnonx1ogQ9h0putv1LI2RNUjBJc",
-  authDomain: "moldes-cloud-digiflash.web.app",
+  authDomain: "moldes-cloud-digiflash.firebaseapp.com",
   projectId: "moldes-cloud-digiflash",
   storageBucket: "moldes-cloud-digiflash.firebasestorage.app",
   messagingSenderId: "598592000237",
