@@ -9,7 +9,7 @@ import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD2PFuASnonx1ogQ9h0putv1LI2RNUjBJc",
-  authDomain: "moldes-cloud-digiflash.firebaseapp.com",
+  // Keep the OAuth handler on the same Firebase Hosting domain as the app.\n  // This avoids browsers blocking the popup result as third-party storage.\n  authDomain: "moldes-cloud-digiflash.web.app",
   projectId: "moldes-cloud-digiflash",
   storageBucket: "moldes-cloud-digiflash.firebasestorage.app",
   messagingSenderId: "598592000237",
