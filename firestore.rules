@@ -14,7 +14,8 @@ service cloud.firestore {
     function companyAllowed() {
       return isSuperAdmin()
         || !exists(companyPath(currentCompany()))
-        || get(companyPath(currentCompany())).data.status != "blocked";
+        || (get(companyPath(currentCompany())).data.status != "blocked"
+          && get(companyPath(currentCompany())).data.status != "deleted");
     }
     function isApproved() {
       return hasProfile()
