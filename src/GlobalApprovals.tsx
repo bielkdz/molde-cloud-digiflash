@@ -38,16 +38,17 @@ export function GlobalApprovals({ currentUid }: { currentUid: string }) {
     <div className="approval-list">
       {users.map((user) => {
         const company = companies.find((item) => item.id === user.companyId);
+        const companyAvailable = Boolean(company && company.status !== "deleted");
         const approvedRole: UserRole = user.requestedRole === "admin" ? "admin" : "user";
         return <article key={user.uid}>
           <div className="user-avatar">{user.photoURL ? <img src={user.photoURL} alt=""/> : (user.name?.[0] || "U")}</div>
           <div className="approval-details">
             <strong>{user.name || "Usuário"}</strong>
             <small>{user.email}</small>
-            <small>Empresa: {company?.name || user.companyId}</small>
+            <small>Empresa: {company?.name || "Vínculo ausente ou empresa removida"}</small>
           </div>
           <span className="role-badge pending">{approvedRole === "admin" ? "Administrador" : "Funcionário"}</span>
-          <button className="primary" onClick={() => void setRole(user, approvedRole)}>Autorizar</button>
+          <button className="primary" disabled={!companyAvailable} title={companyAvailable ? undefined : "Recuse este cadastro e crie um novo convite pela empresa correta."} onClick={() => void setRole(user, approvedRole)}>Autorizar</button>
           <button className="danger-action" onClick={() => void setRole(user, "blocked")}>Recusar</button>
         </article>;
       })}

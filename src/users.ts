@@ -124,9 +124,13 @@ export function watchAllUsers(companyId: string, onChange: (users: UserProfile[]
 }
 
 export function changeUserRole(uid: string, role: UserRole, companyId: string, approvedBy?: string) {
+  const normalizedCompanyId = companyId?.trim();
+  if (!normalizedCompanyId && role !== "blocked") {
+    return Promise.reject(new Error("Este cadastro não possui uma empresa válida."));
+  }
   return updateDoc(doc(db, "users", uid), {
     role,
-    companyId,
+    companyId: normalizedCompanyId || "",
     ...(role !== "pending" ? { requestedRole: null } : {}),
     ...(role === "admin" || role === "user" ? {
       approvedAt: serverTimestamp(),
