@@ -49,9 +49,9 @@ export async function getOneDriveAccount() {
 
 export async function connectOneDrive() {
   const client = await getClient();
-  const result = await client.loginPopup({ scopes, prompt: "select_account" });
-  client.setActiveAccount(result.account);
-  return result.account;
+  // Redirect in the main window so the application itself cannot consume the
+  // OAuth response inside a popup before MSAL finishes the authentication.
+  await client.loginRedirect({ scopes, prompt: "select_account" });
 }
 
 export async function disconnectOneDrive() {
@@ -142,6 +142,8 @@ export function oneDriveErrorMessage(error: unknown) {
   if (message === "onedrive/not-connected") return "Conecte sua conta do OneDrive antes de enviar a foto.";
   if (message === "onedrive/file-too-large") return "A foto ultrapassa o limite de 250 MB para envio direto.";
   if (message.includes("user_cancelled") || message.includes("user_cancelled_login")) return "A conexão com o OneDrive foi cancelada.";
+  if (message.includes("monitor_window_timeout") || message.includes("hash_empty_error")) return "A janela da Microsoft não devolveu a autorização. Atualize a página e conecte novamente.";
+  if (message.includes("unauthorized_client")) return "O aplicativo Microsoft não está habilitado para esta conta.";
   if (message.startsWith("onedrive/401:") || message.startsWith("onedrive/403:")) return "A Microsoft não autorizou o acesso aos arquivos. Conecte novamente.";
   if (message.startsWith("onedrive/507:")) return "O OneDrive está sem espaço disponível.";
   return "Não foi possível concluir a operação no OneDrive. Tente novamente.";
