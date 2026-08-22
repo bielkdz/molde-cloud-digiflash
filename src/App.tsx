@@ -34,7 +34,7 @@ export default function App(){
    });
   return()=>{active=false;unsubscribeAuth();unsubscribeProfile()};
  },[]);
- if(loading)return <div className="auth-screen"><div className="auth-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
+ if(loading)return <div className="auth-screen auth-loading-screen"><div className="auth-card auth-loading-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
  if(!user)return <AuthScreen error={error} setError={setError}/>;
  if(!profile)return <AccessScreen title="Carregando permissão" message="Estamos preparando seu perfil de acesso." user={user}/>;
  if(profile.role==="pending")return <AccessScreen title="Cadastro aguardando aprovação" message="O administrador precisa liberar seu acesso. Esta tela será atualizada automaticamente." user={user}/>;
