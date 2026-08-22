@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-labelledby="title desc">
+  <title id="title">Molde Cloud DigiFlash</title>
+  <desc id="desc">Marca Molde Cloud com M geométrico e detalhes em ciano e magenta.</desc>
+  <path fill="#F7F3EA" d="M235 24h42l43 52 43-52h42v108h-34V70l-51 58-51-58v62h-34z"/>
+  <path fill="#21CFE0" d="m235 70 34 42v34l-34-42z"/>
+  <path fill="#D92CB5" d="m269 146-14 14h14z"/>
+  <text x="320" y="205" fill="#F7F3EA" font-family="Arial Narrow,Arial,sans-serif" font-size="62" font-weight="800" letter-spacing="3" text-anchor="middle">MOLDE CLOUD</text>
+  <path stroke="#21CFE0" stroke-width="4" d="M132 234h90"/>
+  <text x="320" y="242" fill="#B9DDE1" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="700" letter-spacing="13" text-anchor="middle">DIGIFLASH</text>
+  <path stroke="#D92CB5" stroke-width="4" d="M500 234h90"/>
+</svg>
