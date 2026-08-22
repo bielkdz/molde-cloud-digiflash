@@ -21,20 +21,21 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 const nav=[{id:"dashboard" as Screen,label:"Início",icon:"home"},{id:"capture" as Screen,label:"Tirar foto",icon:"camera"},{id:"files" as Screen,label:"Arquivos",icon:"folder"},{id:"history" as Screen,label:"Histórico",icon:"clock"},{id:"search" as Screen,label:"Localizar",icon:"search"}];
 
 export default function App(){
- const [user,setUser]=useState<User|null>(null),[profile,setProfile]=useState<UserProfile|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState("");
+ const [user,setUser]=useState<User|null>(null),[profile,setProfile]=useState<UserProfile|null>(null),[loading,setLoading]=useState(true),[splashVisible,setSplashVisible]=useState(true),[error,setError]=useState("");
  useEffect(()=>{
   let unsubscribeAuth=()=>{},unsubscribeProfile=()=>{};
-  let active=true;
+  let active=true,splashTimer=window.setTimeout(()=>{if(active)setSplashVisible(false)},1800);
   unsubscribeAuth=onAuthStateChanged(auth,current=>{
     unsubscribeProfile();setUser(current);setProfile(null);
     if(!current){setLoading(false);return}
+    window.clearTimeout(splashTimer);setSplashVisible(true);splashTimer=window.setTimeout(()=>{if(active)setSplashVisible(false)},2400);
     setLoading(false);
     unsubscribeProfile=watchUserProfile(current.uid,nextProfile=>{if(active)setProfile(nextProfile)});
     void ensureUserProfile(current).then(initialProfile=>{if(active)setProfile(initialProfile)}).catch(()=>{if(active)setError("Login realizado, mas não foi possível carregar sua permissão.")});
    });
-  return()=>{active=false;unsubscribeAuth();unsubscribeProfile()};
+  return()=>{active=false;window.clearTimeout(splashTimer);unsubscribeAuth();unsubscribeProfile()};
  },[]);
- if(loading)return <div className="auth-screen auth-loading-screen"><div className="auth-card auth-loading-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
+ if(loading||splashVisible)return <div className="auth-screen auth-loading-screen"><div className="auth-card auth-loading-card"><span className="brand-mark">M</span><h1>Molde Cloud</h1><p>Preparando seu acesso...</p><div className="auth-loader"/></div></div>;
  if(!user)return <AuthScreen error={error} setError={setError}/>;
  if(!profile)return <AccessScreen title="Carregando permissão" message="Estamos preparando seu perfil de acesso." user={user}/>;
  if(profile.role==="pending")return <AccessScreen title="Cadastro aguardando aprovação" message="O administrador precisa liberar seu acesso. Esta tela será atualizada automaticamente." user={user}/>;
@@ -84,7 +85,7 @@ function DashboardApp({user,profile,notice}:{user:User;profile:UserProfile;notic
  async function installApp(){if(!installPrompt)return;await installPrompt.prompt();const choice=await installPrompt.userChoice;if(choice.outcome==="accepted")setInstallPrompt(null)}
  function navigateTo(next:Screen){setScreen(next);setCollapsed(true);setProfileOpen(false)}
  if((companyStatus==="blocked"||companyStatus==="deleted")&&profile.role!=="superadmin")return <AccessScreen title={companyStatus==="deleted"?"Empresa removida":"Empresa temporariamente bloqueada"} message="O administrador geral precisa reativar a empresa para liberar o acesso." user={user}/>;
- return <main className={`app-shell app-enter ${collapsed?"is-collapsed":""}`}>
+ return <main className={`app-shell app-enter screen-${screen} ${collapsed?"is-collapsed":""}`}>
   <button className="mobile-menu" onClick={()=>setCollapsed(false)} aria-label="Abrir menu">☰</button>
   {!collapsed&&<button className="menu-overlay" onClick={()=>setCollapsed(true)} aria-label="Fechar menu"/>}
   <aside className="sidebar"><div className="brand"><span className="brand-mark">M</span><span className="brand-copy">Molde Cloud<small>DIGIFLASH</small></span></div><button className="collapse" onClick={()=>setCollapsed(!collapsed)} aria-label="Recolher menu">‹</button><nav>{visibleNav.map(x=><button key={x.id} className={screen===x.id?"active":""} onClick={()=>navigateTo(x.id)}><span className="nav-icon"><Icon name={x.icon}/></span><span className="nav-label">{x.label}</span></button>)}</nav>{installPrompt&&<button className="install-button" onClick={()=>void installApp()}><span className="nav-icon"><Icon name="desktop"/></span><span className="nav-label">Instalar aplicativo</span></button>}<button className={`onedrive-button ${oneDriveAccount?"connected":""}`} disabled={busy||!online} onClick={()=>void handleOneDrive()}><span className="nav-icon"><Icon name="cloud"/></span><span className="nav-label">{oneDriveAccount?"Trocar conta OneDrive":isOneDriveConfigured?"Conectar OneDrive":"Ativação pendente"}</span></button></aside>
