@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#d72dff"/><stop offset="1" stop-color="#27d9dc"/></linearGradient></defs>
-  <rect width="512" height="512" rx="112" fill="#0b0e10"/>
-  <rect x="66" y="66" width="380" height="380" rx="92" fill="#121719" stroke="url(#g)" stroke-width="10"/>
-  <path d="M126 348 177 164h73l7 82 52-82h78l-51 184h-72l24-87-55 87h-49l-7-87-24 87Z" fill="url(#g)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Molde Cloud">
+  <rect width="512" height="512" rx="112" fill="#0B0E10"/>
+  <rect x="54" y="54" width="404" height="404" rx="96" fill="#14191C" stroke="#334047" stroke-width="8"/>
+  <path fill="#F7F3EA" d="M105 145h67l84 101 84-101h67v224h-62V239l-89 103-89-103v130h-62z"/>
+  <path fill="#21CFE0" d="m105 239 62 76v67l-62-78z"/>
+  <path fill="#D92CB5" d="m167 382-26 27h26z"/>
 </svg>
