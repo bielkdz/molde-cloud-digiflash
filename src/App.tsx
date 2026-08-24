@@ -419,6 +419,7 @@ function DashboardApp({
     | { type: "file"; item: FileRecord }
     | null
   >(null);
+  const historyInitialized = useRef(false);
   const companyStatus: CompanyStatus = currentCompany?.status || "active";
   const visibleNav =
     profile.role === "superadmin"
@@ -557,6 +558,61 @@ function DashboardApp({
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [profileOpen]);
+  useEffect(() => {
+    if (historyInitialized.current) return;
+    historyInitialized.current = true;
+    window.history.replaceState(
+      { ...window.history.state, moldeCloudScreen: "dashboard" },
+      "",
+    );
+    window.history.pushState({ moldeCloudScreen: "dashboard" }, "");
+  }, []);
+  useEffect(() => {
+    const restoreCurrentEntry = () => {
+      window.history.pushState({ moldeCloudScreen: screen }, "");
+    };
+    const goBackInsideApp = (event: PopStateEvent) => {
+      if (mobileActions) {
+        setMobileActions(null);
+        restoreCurrentEntry();
+        return;
+      }
+      if (previewFile) {
+        setPreviewFile(null);
+        restoreCurrentEntry();
+        return;
+      }
+      if (showFolder) {
+        setShowFolder(false);
+        restoreCurrentEntry();
+        return;
+      }
+      if (profileOpen) {
+        setProfileOpen(false);
+        restoreCurrentEntry();
+        return;
+      }
+      if (!collapsed) {
+        setCollapsed(true);
+        restoreCurrentEntry();
+        return;
+      }
+
+      const previous = event.state?.moldeCloudScreen as Screen | undefined;
+      if (previous && previous !== screen) {
+        setScreen(previous);
+        setProfileOpen(false);
+        setCollapsed(true);
+        return;
+      }
+
+      // Keep one internal history entry on the dashboard so a single Android
+      // back gesture never closes the browser/app by accident.
+      if (screen === "dashboard") restoreCurrentEntry();
+    };
+    window.addEventListener("popstate", goBackInsideApp);
+    return () => window.removeEventListener("popstate", goBackInsideApp);
+  }, [collapsed, mobileActions, previewFile, profileOpen, screen, showFolder]);
   useEffect(() => {
     if (!folders.some((item) => item.id === folderId))
       setFolderId(folders[0]?.id ?? "");
@@ -959,7 +1015,7 @@ function DashboardApp({
       setFileName("");
       if (inputRef.current) inputRef.current.value = "";
       setMessage("Foto enviada e registrada com sucesso no OneDrive.");
-      setScreen("files");
+      navigateTo("files");
     } catch {
       setMessage(
         "A foto foi enviada ao OneDrive, mas o histórico não pôde ser salvo. Não envie novamente antes de conferir o OneDrive.",
@@ -981,6 +1037,9 @@ function DashboardApp({
     if (choice.outcome === "accepted") setInstallPrompt(null);
   }
   function navigateTo(next: Screen) {
+    if (next !== screen) {
+      window.history.pushState({ moldeCloudScreen: next }, "");
+    }
     setScreen(next);
     setCollapsed(true);
     setProfileOpen(false);
@@ -1225,7 +1284,7 @@ function DashboardApp({
             files={files}
             folders={folders}
             oneDriveConnected={Boolean(oneDriveAccount)}
-            go={setScreen}
+            go={navigateTo}
             openFile={setPreviewFile}
           />
         )}
@@ -1266,7 +1325,7 @@ function DashboardApp({
                 </button>
                 <button
                   className="primary"
-                  onClick={() => setScreen("capture")}
+                  onClick={() => navigateTo("capture")}
                 >
                   <Icon name="plus" /> Nova foto
                 </button>
