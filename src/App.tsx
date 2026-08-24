@@ -413,7 +413,8 @@ function DashboardApp({
     [fileFolderFilter, setFileFolderFilter] = useState("all"),
     [selectedFiles, setSelectedFiles] = useState<Set<string>>(() => new Set());
   const [sentPhotosOpen, setSentPhotosOpen] = useState(false),
-    [trashOpen, setTrashOpen] = useState(false);
+    [trashOpen, setTrashOpen] = useState(false),
+    [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const companyStatus: CompanyStatus = currentCompany?.status || "active";
   const visibleNav =
     profile.role === "superadmin"
@@ -1273,7 +1274,26 @@ function DashboardApp({
             {folders.length ? (
               <div className="folder-grid">
                 {folders.map((folder) => (
-                  <article key={folder.id}>
+                  <article
+                    key={folder.id}
+                    className={openFolderId === folder.id ? "is-open" : ""}
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={openFolderId === folder.id}
+                    onClick={() =>
+                      setOpenFolderId((current) =>
+                        current === folder.id ? null : folder.id,
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setOpenFolderId((current) =>
+                          current === folder.id ? null : folder.id,
+                        );
+                      }
+                    }}
+                  >
                     <span>
                       <Icon name="folder" />
                     </span>
@@ -1288,16 +1308,46 @@ function DashboardApp({
                       </small>
                     </div>
                     <div className="folder-actions">
-                      <button onClick={() => void editFolder(folder)}>
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void editFolder(folder);
+                        }}
+                      >
                         Editar
                       </button>
                       <button
                         className="danger"
-                        onClick={() => void deleteFolder(folder)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void deleteFolder(folder);
+                        }}
                       >
                         Excluir
                       </button>
                     </div>
+                    {openFolderId === folder.id && (
+                      <div className="folder-contents">
+                        <small>ARQUIVOS NESTA PASTA</small>
+                        {files.filter((item) => item.folderId === folder.id)
+                          .length ? (
+                          <ul>
+                            {files
+                              .filter((item) => item.folderId === folder.id)
+                              .sort((a, b) =>
+                                a.name.localeCompare(b.name, "pt-BR", {
+                                  sensitivity: "base",
+                                }),
+                              )
+                              .map((item) => (
+                                <li key={item.id}>{item.name}</li>
+                              ))}
+                          </ul>
+                        ) : (
+                          <p>Esta pasta está vazia.</p>
+                        )}
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
