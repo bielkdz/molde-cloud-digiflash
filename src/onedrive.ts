@@ -5,6 +5,7 @@ const rootFolderName = "Molde Cloud DigiFlash";
 const scopes = ["Files.ReadWrite", "User.Read"];
 const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() || "2ad90ac1-7b91-46a3-ba52-0093e1e7775e";
 const connectionIntentKey = "molde-cloud:onedrive-company";
+const renewalNoticeKey = "molde-cloud:onedrive-renewed";
 
 let clientPromise: Promise<PublicClientApplication> | null = null;
 
@@ -59,6 +60,12 @@ export function consumeOneDriveConnectionIntent(companyId: string) {
   return intendedCompany === companyId;
 }
 
+export function consumeOneDriveRenewalNotice() {
+  const renewed = window.sessionStorage.getItem(renewalNoticeKey) === "pending";
+  window.sessionStorage.removeItem(renewalNoticeKey);
+  return renewed;
+}
+
 export async function connectOneDrive(companyId: string) {
   // Only an explicit click may define or replace a company's official drive.
   // A Microsoft account restored from browser cache must never claim a company.
@@ -110,7 +117,9 @@ async function getAccessToken(account?: AccountInfo | null) {
       || ["timed_out", "login_required", "interaction_required", "consent_required", "no_tokens_found"].includes(code)
       || message.includes("timed_out");
     if (!sessionNeedsRenewal) throw error;
-    return (await client.acquireTokenPopup({ scopes, account: selectedAccount, prompt: "select_account" })).accessToken;
+    window.sessionStorage.setItem(renewalNoticeKey, "pending");
+    await client.acquireTokenRedirect({ scopes, account: selectedAccount, prompt: "select_account" });
+    throw new Error("onedrive/session-renewal-started");
   }
 }
 
@@ -267,12 +276,14 @@ export function oneDriveErrorMessage(error: unknown) {
     : "";
   if (message === "onedrive/not-configured") return "A integração Microsoft ainda precisa receber o ID do aplicativo.";
   if (message === "onedrive/not-connected") return "Conecte sua conta do OneDrive antes de enviar a foto.";
+  if (message === "onedrive/session-renewal-started") return "A Microsoft está renovando sua sessão. Depois de voltar ao sistema, clique em Sincronizar novamente.";
   if (message === "onedrive/file-too-large") return "A foto ultrapassa o limite de 250 MB para envio direto.";
   if (message === "onedrive/network-error") return "A internet caiu durante o envio. A foto não foi registrada; tente novamente quando a conexão voltar.";
   if (message.includes("user_cancelled") || message.includes("user_cancelled_login")) return "A conexão com o OneDrive foi cancelada.";
   if (message.includes("monitor_window_timeout") || message.includes("hash_empty_error")) return "A janela da Microsoft não devolveu a autorização. Atualize a página e conecte novamente.";
   if (message.includes("interaction_in_progress")) return "Havia uma autorização antiga presa no navegador. Feche esta aba, abra o sistema novamente e conecte o OneDrive.";
-  if (code === "timed_out" || message.includes("timed_out")) return "A sessão do OneDrive expirou. Clique em Conectar OneDrive novamente e repita a sincronização.";
+  if (code === "timed_out" || message.includes("timed_out")) return "A sessão do OneDrive expirou e precisa ser renovada. Clique em Sincronizar novamente.";
+  if (code === "popup_window_error" || message.includes("popup_window_error")) return "O navegador bloqueou a janela da Microsoft. Atualize a página e tente sincronizar novamente.";
   if (message.includes("unauthorized_client")) return "O aplicativo Microsoft não está habilitado para esta conta.";
   if (message.startsWith("onedrive/401:") || message.startsWith("onedrive/403:")) return "A Microsoft não autorizou o acesso aos arquivos. Conecte novamente.";
   if (message.startsWith("onedrive/507:")) return "O OneDrive está sem espaço disponível.";
