@@ -220,6 +220,15 @@ export async function deleteOneDriveItem(itemId: string) {
   if (!response.ok && response.status !== 404) throw new Error(`onedrive/${response.status}:${await response.text()}`);
 }
 
+export async function downloadOneDriveItem(itemId: string) {
+  const token = await getAccessToken();
+  const response = await fetch(`${graphBaseUrl}/me/drive/items/${itemId}/content`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`onedrive/${response.status}:${await response.text()}`);
+  return response.blob();
+}
+
 export async function readOneDriveSnapshot(): Promise<OneDriveSnapshot> {
   const root = await findByPath(rootFolderName);
   if (!root) return { folders: [], files: [] };
