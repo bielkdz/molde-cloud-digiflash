@@ -105,6 +105,50 @@ export async function createCompany(name: string, adminEmail: string, createdBy:
   }));
 }
 
+export async function createCompanyForPendingUser(uid: string, name: string, email: string, createdBy: string) {
+  const cleanName = name.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!uid || !cleanName || !normalizedEmail) throw new Error("Informe um nome válido para a nova empresa.");
+
+  const companyRef = doc(collection(db, "companies"));
+  const userRef = doc(db, "users", uid);
+  const invitationRef = doc(db, "companyInvites", normalizedEmail);
+
+  await runTransaction(db, async (transaction) => {
+    const userSnapshot = await transaction.get(userRef);
+    if (!userSnapshot.exists() || userSnapshot.data().role !== "pending") {
+      throw new Error("Este cadastro não está mais aguardando autorização.");
+    }
+
+    transaction.set(companyRef, {
+      name: cleanName,
+      adminEmail: normalizedEmail,
+      status: "active",
+      createdBy,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    transaction.update(userRef, {
+      companyId: companyRef.id,
+      role: "admin",
+      requestedRole: null,
+      approvedBy: createdBy,
+      approvedAt: serverTimestamp(),
+    });
+    transaction.set(invitationRef, {
+      email: normalizedEmail,
+      companyId: companyRef.id,
+      role: "admin",
+      claimedBy: uid,
+      claimedAt: serverTimestamp(),
+      createdBy,
+      createdAt: serverTimestamp(),
+    }, { merge: true });
+  });
+
+  return companyRef.id;
+}
+
 export function setCompanyStatus(companyId: string, status: CompanyStatus) {
   return updateDoc(doc(db, "companies", companyId), {
     status,
