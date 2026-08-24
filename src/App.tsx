@@ -1258,16 +1258,17 @@ function DashboardApp({
                   disabled={busy || !online || !oneDriveAccount}
                   onClick={() => void syncOneDrive()}
                 >
-                  ↻ {busy ? "Sincronizando..." : "Sincronizar"}
+                  <Icon name="sync" />
+                  {busy ? "Sincronizando..." : "Sincronizar"}
                 </button>
                 <button className="outline" onClick={() => setShowFolder(true)}>
-                  ＋ Nova pasta
+                  <Icon name="plus" /> Nova pasta
                 </button>
                 <button
                   className="primary"
                   onClick={() => setScreen("capture")}
                 >
-                  ＋ Nova foto
+                  <Icon name="plus" /> Nova foto
                 </button>
               </div>
             </div>
@@ -1314,7 +1315,7 @@ function DashboardApp({
                           void editFolder(folder);
                         }}
                       >
-                        Editar
+                        <Icon name="edit" /> Editar
                       </button>
                       <button
                         className="danger"
@@ -1323,7 +1324,7 @@ function DashboardApp({
                           void deleteFolder(folder);
                         }}
                       >
-                        Excluir
+                        <Icon name="trash" /> Excluir
                       </button>
                     </div>
                     {openFolderId === folder.id && (
@@ -1503,14 +1504,14 @@ function DashboardApp({
                           disabled={busy}
                           onClick={() => void restoreDeletedFile(item)}
                         >
-                          Restaurar
+                          <Icon name="restore" /> Restaurar
                         </button>
                         <button
                           className="danger-action"
                           disabled={busy}
                           onClick={() => void permanentlyDeleteFile(item)}
                         >
-                          Excluir definitivamente
+                          <Icon name="trash" /> Excluir definitivamente
                         </button>
                       </article>
                     ))}
@@ -1674,9 +1675,11 @@ function DashboardApp({
             </div>
             <footer>
               <button onClick={() => void renameFile(previewFile)}>
-                Renomear
+                <Icon name="edit" /> Renomear
               </button>
-              <button onClick={() => void moveFile(previewFile)}>Mover</button>
+              <button onClick={() => void moveFile(previewFile)}>
+                <Icon name="move" /> Mover
+              </button>
               <button
                 className="danger"
                 onClick={() => {
@@ -1685,7 +1688,7 @@ function DashboardApp({
                   void deleteFile(file);
                 }}
               >
-                Excluir
+                <Icon name="trash" /> Excluir
               </button>
             </footer>
           </section>
@@ -2139,15 +2142,19 @@ function FileRow({
       </b>
       {onOpen && (
         <button className="file-open" onClick={onOpen}>
-          Visualizar
+          <Icon name="eye" /> Visualizar
         </button>
       )}
       {actions && (
         <div className="file-actions">
-          <button onClick={actions.rename}>Renomear</button>
-          <button onClick={actions.move}>Mover</button>
+          <button onClick={actions.rename}>
+            <Icon name="edit" /> Renomear
+          </button>
+          <button onClick={actions.move}>
+            <Icon name="move" /> Mover
+          </button>
           <button className="danger" onClick={actions.remove}>
-            Excluir
+            <Icon name="trash" /> Excluir
           </button>
         </div>
       )}
@@ -2604,6 +2611,42 @@ function Icon({ name }: { name: string }) {
         <rect x="3" y="3" width="18" height="18" rx="2" />
         <circle cx="9" cy="9" r="2" />
         <path d="m3 17 5-5 4 4 3-3 6 6" />
+      </>
+    ),
+    edit: (
+      <>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+      </>
+    ),
+    move: (
+      <>
+        <path d="M5 9V5h4M19 15v4h-4M5 5l6 6M19 19l-6-6" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14" />
+        <path d="M10 11v6M14 11v6" />
+      </>
+    ),
+    eye: (
+      <>
+        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </>
+    ),
+    sync: (
+      <>
+        <path d="M20 7v5h-5M4 17v-5h5" />
+        <path d="M6.1 9A7 7 0 0 1 18.5 6.5L20 12M4 12l1.5 5.5A7 7 0 0 0 17.9 15" />
+      </>
+    ),
+    plus: <path d="M12 5v14M5 12h14" />,
+    restore: (
+      <>
+        <path d="M4 4v6h6" />
+        <path d="M5.5 15a8 8 0 1 0 .5-8.5L4 10" />
       </>
     ),
   };
