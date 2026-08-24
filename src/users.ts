@@ -185,3 +185,7 @@ export function cancelEmployeeInvite(email: string) {
   if (!normalizedEmail) return Promise.resolve();
   return deleteDoc(doc(db, "companyInvites", normalizedEmail));
 }
+
+export function removeUserAccess(uid: string) {
+  return deleteDoc(doc(db, "users", uid));
+}

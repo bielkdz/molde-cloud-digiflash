@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteField,
   doc,
   getDocs,
   onSnapshot,
@@ -37,6 +38,8 @@ export type FileRecord = {
   oneDriveWebUrl?: string;
   uploadedAt?: Timestamp;
   createdAt?: Timestamp;
+  deletedAt?: Timestamp;
+  deletedByName?: string;
 };
 
 export type HistoryRecord = {
@@ -44,7 +47,7 @@ export type HistoryRecord = {
   companyId: string;
   userId: string;
   actorName?: string;
-  action: "folder_created" | "folder_renamed" | "folder_deleted" | "photo_registered" | "photo_uploaded" | "photo_renamed" | "photo_moved" | "photo_deleted" | "workspace_synced";
+  action: "folder_created" | "folder_renamed" | "folder_deleted" | "photo_registered" | "photo_uploaded" | "photo_renamed" | "photo_moved" | "photo_deleted" | "photo_restored" | "workspace_synced";
   title: string;
   detail: string;
   createdAt?: Timestamp;
@@ -80,7 +83,11 @@ export function watchFolders(companyId: string, onChange: (items: FolderRecord[]
 }
 
 export function watchFiles(companyId: string, onChange: (items: FileRecord[]) => void, onError: (message: string) => void) {
-  return watchCompanyCollection<FileRecord>("files", companyId, onChange, onError);
+  return watchCompanyCollection<FileRecord>("files", companyId, (items) => onChange(items.filter((item) => !item.deletedAt)), onError);
+}
+
+export function watchDeletedFiles(companyId: string, onChange: (items: FileRecord[]) => void, onError: (message: string) => void) {
+  return watchCompanyCollection<FileRecord>("files", companyId, (items) => onChange(items.filter((item) => Boolean(item.deletedAt))), onError);
 }
 
 export function watchHistory(companyId: string, onChange: (items: HistoryRecord[]) => void, onError: (message: string) => void) {
@@ -224,11 +231,31 @@ export async function moveFileRecord(actor: WorkspaceActor, file: FileRecord, fo
 
 export async function removeFileRecord(actor: WorkspaceActor, file: FileRecord) {
   const batch = writeBatch(db);
-  batch.delete(doc(db, "files", file.id));
+  batch.update(doc(db, "files", file.id), { deletedAt: serverTimestamp(), deletedByName: actor.name });
   batch.set(doc(collection(db, "history")), {
     companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "photo_deleted",
     title: "Foto excluída", detail: `${file.name} · ${file.folderName} · ${actor.name}`, createdAt: serverTimestamp(),
   });
+  await batch.commit();
+}
+
+export async function restoreFileRecord(actor: WorkspaceActor, file: FileRecord, webUrl?: string) {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "files", file.id), {
+    deletedAt: deleteField(),
+    deletedByName: deleteField(),
+    ...(webUrl ? { oneDriveWebUrl: webUrl } : {}),
+  });
+  batch.set(doc(collection(db, "history")), {
+    companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "photo_restored",
+    title: "Foto restaurada", detail: `${file.name} · ${file.folderName} · ${actor.name}`, createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function permanentlyDeleteFileRecord(file: FileRecord) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "files", file.id));
   await batch.commit();
 }
 
