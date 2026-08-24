@@ -415,6 +415,11 @@ function DashboardApp({
   const [sentPhotosOpen, setSentPhotosOpen] = useState(false),
     [trashOpen, setTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const [mobileActions, setMobileActions] = useState<
+    | { type: "folder"; item: FolderRecord }
+    | { type: "file"; item: FileRecord }
+    | null
+  >(null);
   const companyStatus: CompanyStatus = currentCompany?.status || "active";
   const visibleNav =
     profile.role === "superadmin"
@@ -1327,6 +1332,16 @@ function DashboardApp({
                         <Icon name="trash" /> Excluir
                       </button>
                     </div>
+                    <button
+                      className="mobile-more-button"
+                      aria-label={`Ações da pasta ${folder.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMobileActions({ type: "folder", item: folder });
+                      }}
+                    >
+                      <Icon name="more" />
+                    </button>
                     {openFolderId === folder.id && (
                       <div className="folder-contents">
                         <small>ARQUIVOS NESTA PASTA</small>
@@ -1463,6 +1478,7 @@ function DashboardApp({
                           move: () => void moveFile(item),
                           remove: () => void deleteFile(item),
                         }}
+                        onMenu={() => setMobileActions({ type: "file", item })}
                       />
                     ))
                   ) : (
@@ -1691,6 +1707,104 @@ function DashboardApp({
                 <Icon name="trash" /> Excluir
               </button>
             </footer>
+          </section>
+        </div>
+      )}
+      {mobileActions && (
+        <div
+          className="action-sheet-backdrop"
+          onClick={() => setMobileActions(null)}
+        >
+          <section
+            className="action-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Ações de ${mobileActions.item.name}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="action-sheet-handle" />
+            <header>
+              <small>
+                {mobileActions.type === "folder" ? "PASTA" : "FOTOGRAFIA"}
+              </small>
+              <strong>{mobileActions.item.name}</strong>
+            </header>
+            {mobileActions.type === "folder" ? (
+              <>
+                <button
+                  onClick={() => {
+                    setOpenFolderId(mobileActions.item.id);
+                    setMobileActions(null);
+                  }}
+                >
+                  <Icon name="folder" /> Abrir pasta
+                </button>
+                <button
+                  onClick={() => {
+                    const folder = mobileActions.item;
+                    setMobileActions(null);
+                    void editFolder(folder);
+                  }}
+                >
+                  <Icon name="edit" /> Renomear
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => {
+                    const folder = mobileActions.item;
+                    setMobileActions(null);
+                    void deleteFolder(folder);
+                  }}
+                >
+                  <Icon name="trash" /> Excluir
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setPreviewFile(mobileActions.item);
+                    setMobileActions(null);
+                  }}
+                >
+                  <Icon name="eye" /> Visualizar
+                </button>
+                <button
+                  onClick={() => {
+                    const file = mobileActions.item;
+                    setMobileActions(null);
+                    void renameFile(file);
+                  }}
+                >
+                  <Icon name="edit" /> Renomear
+                </button>
+                <button
+                  onClick={() => {
+                    const file = mobileActions.item;
+                    setMobileActions(null);
+                    void moveFile(file);
+                  }}
+                >
+                  <Icon name="move" /> Mover
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => {
+                    const file = mobileActions.item;
+                    setMobileActions(null);
+                    void deleteFile(file);
+                  }}
+                >
+                  <Icon name="trash" /> Excluir
+                </button>
+              </>
+            )}
+            <button
+              className="action-sheet-cancel"
+              onClick={() => setMobileActions(null)}
+            >
+              Cancelar
+            </button>
           </section>
         </div>
       )}
@@ -2098,12 +2212,14 @@ function FileRow({
   onSelect,
   onOpen,
   actions,
+  onMenu,
 }: {
   item: FileRecord;
   selected?: boolean;
   onSelect?: () => void;
   onOpen?: () => void;
   actions?: { rename: () => void; move: () => void; remove: () => void };
+  onMenu?: () => void;
 }) {
   return (
     <div className={`file-row ${selected ? "is-selected" : ""}`}>
@@ -2157,6 +2273,15 @@ function FileRow({
             <Icon name="trash" /> Excluir
           </button>
         </div>
+      )}
+      {onMenu && (
+        <button
+          className="mobile-more-button file-more-button"
+          aria-label={`Ações de ${item.name}`}
+          onClick={onMenu}
+        >
+          <Icon name="more" />
+        </button>
       )}
     </div>
   );
@@ -2647,6 +2772,13 @@ function Icon({ name }: { name: string }) {
       <>
         <path d="M4 4v6h6" />
         <path d="M5.5 15a8 8 0 1 0 .5-8.5L4 10" />
+      </>
+    ),
+    more: (
+      <>
+        <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+        <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
       </>
     ),
   };
