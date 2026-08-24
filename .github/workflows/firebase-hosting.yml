@@ -3,10 +3,17 @@ name: Publicar no Firebase
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: firebase-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -19,11 +26,17 @@ jobs:
       - run: npm run build
         env:
           VITE_MICROSOFT_CLIENT_ID: "${{ vars.VITE_MICROSOFT_CLIENT_ID }}"
+      - name: Encerrar após validar pull request
+        if: github.event_name == 'pull_request'
+        run: echo "Build validado; a publicação ocorre somente após o merge na main."
       - uses: google-github-actions/auth@v2
+        if: github.event_name == 'push'
         with:
           credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"
       - run: npx firebase-tools deploy --only firestore:rules --project moldes-cloud-digiflash
+        if: github.event_name == 'push'
       - uses: FirebaseExtended/action-hosting-deploy@v0
+        if: github.event_name == 'push'
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
           firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"
