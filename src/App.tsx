@@ -39,7 +39,6 @@ import {
   consumeOneDriveConnectionIntent,
   consumeOneDriveRenewalNotice,
   deleteOneDriveItem,
-  disconnectOneDrive,
   downloadOneDriveItem,
   ensureOneDriveFolder,
   getOneDriveAccount,
@@ -971,13 +970,9 @@ function DashboardApp({
     }
   }
   async function signOutApp() {
-    try {
-      await disconnectOneDrive();
-    } catch {
-      setMessage("Não foi possível desconectar o OneDrive.");
-    } finally {
-      await signOut(auth);
-    }
+    // Preserve the Microsoft cache so reopening Molde Cloud can restore the
+    // company's verified OneDrive without asking for a new connection.
+    await signOut(auth);
   }
   async function installApp() {
     if (!installPrompt) return;
