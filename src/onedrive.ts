@@ -17,6 +17,11 @@ export type OneDriveUpload = {
 
 type DriveItem = OneDriveUpload & { folder?: { childCount?: number } };
 
+export type OneDriveSnapshot = {
+  folders: Array<{ id: string; name: string }>;
+  files: Array<{ id: string; name: string; size: number; webUrl: string; folderName: string }>;
+};
+
 export const isOneDriveConfigured = Boolean(clientId);
 
 async function getClient() {
@@ -145,6 +150,69 @@ async function ensureFolders(folderName: string) {
   const childPath = `${rootFolderName}/${safeFolder}`;
   const child = (await findByPath(childPath)) ?? await createFolder(root.id, safeFolder);
   return child;
+}
+
+async function listChildren(parentId: string) {
+  let path: string | null = `/me/drive/items/${parentId}/children?$select=id,name,size,webUrl,folder&$top=200`;
+  const items: DriveItem[] = [];
+  while (path) {
+    const page: { value: DriveItem[]; "@odata.nextLink"?: string } = path.startsWith("http")
+      ? await graphUrl(path)
+      : await graph(path);
+    items.push(...page.value);
+    const next = page["@odata.nextLink"];
+    path = next ?? null;
+  }
+  return items;
+}
+
+async function graphUrl<T>(url: string, init: RequestInit = {}) {
+  const token = await getAccessToken();
+  const response = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, ...init.headers } });
+  if (!response.ok) throw new Error(`onedrive/${response.status}:${await response.text()}`);
+  return response.json() as Promise<T>;
+}
+
+export async function ensureOneDriveFolder(folderName: string) {
+  const folder = await ensureFolders(folderName);
+  return { id: folder.id, name: folder.name };
+}
+
+export async function renameOneDriveItem(itemId: string, name: string) {
+  return graph<DriveItem>(`/me/drive/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: safeName(name, "foto") }),
+  });
+}
+
+export async function moveOneDriveItem(itemId: string, folderName: string) {
+  const folder = await ensureFolders(folderName);
+  return graph<DriveItem>(`/me/drive/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parentReference: { id: folder.id } }),
+  });
+}
+
+export async function deleteOneDriveItem(itemId: string) {
+  const token = await getAccessToken();
+  const response = await fetch(`${graphBaseUrl}/me/drive/items/${itemId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok && response.status !== 404) throw new Error(`onedrive/${response.status}:${await response.text()}`);
+}
+
+export async function readOneDriveSnapshot(): Promise<OneDriveSnapshot> {
+  const root = await findByPath(rootFolderName);
+  if (!root) return { folders: [], files: [] };
+  const children = await listChildren(root.id);
+  const folders = children.filter((item) => item.folder).map((item) => ({ id: item.id, name: item.name }));
+  const nested = await Promise.all(folders.map(async (folder) => (await listChildren(folder.id))
+    .filter((item) => !item.folder)
+    .map((item) => ({ id: item.id, name: item.name, size: item.size, webUrl: item.webUrl, folderName: folder.name }))));
+  return { folders, files: nested.flat() };
 }
 
 function fileNameWithExtension(name: string, file: File) {

@@ -13,6 +13,8 @@ Aplicativo web para fotografar moldes no celular, salvar no OneDrive e acessar o
 
 - captura de fotos pelo celular com revisão antes do envio;
 - organização por pastas e busca de arquivos;
+- sincronização manual com alterações feitas pelo computador no OneDrive;
+- renomeação, movimentação e exclusão de arquivos e pastas;
 - histórico compartilhado por empresa;
 - perfis de administrador geral, administrador da empresa e usuário;
 - criação, bloqueio, remoção e restauração de empresas;
