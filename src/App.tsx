@@ -464,6 +464,9 @@ function DashboardApp({
         }),
     [files, fileFolderFilter, fileSort],
   );
+  const lastSynchronization = history.find(
+    (item) => item.action === "workspace_synced",
+  );
   useEffect(() => {
     void migrateLegacyWorkspace(user.uid, profile.companyId).catch(() =>
       setMessage(
@@ -1308,9 +1311,28 @@ function DashboardApp({
         {screen === "files" && (
           <>
             <div className="section-heading">
-              <p>
-                {folders.length} pasta(s) · {files.length} foto(s) registrada(s)
-              </p>
+              <div className="files-summary">
+                <p>
+                  {folders.length} pasta(s) · {files.length} foto(s)
+                  registrada(s)
+                </p>
+                <span className="last-sync">
+                  <Icon name="sync" />
+                  {lastSynchronization ? (
+                    <>
+                      Última sincronização:{" "}
+                      <strong>
+                        {formatDate(lastSynchronization.createdAt?.toDate())}
+                      </strong>
+                      {lastSynchronization.actorName && (
+                        <> · {lastSynchronization.actorName}</>
+                      )}
+                    </>
+                  ) : (
+                    "Ainda não sincronizado"
+                  )}
+                </span>
+              </div>
               <div className="heading-actions">
                 <button
                   className="sync-button"

@@ -45,6 +45,10 @@ service cloud.firestore {
         && request.resource.data.companyId == currentCompany()
         && request.resource.data.userId == request.auth.uid;
     }
+    function tenantIdentityUnchanged() {
+      return request.resource.data.companyId == resource.data.companyId
+        && request.resource.data.userId == resource.data.userId;
+    }
     function isInitialOwnerClaim(uid) {
       return signedIn()
         && request.auth.uid == uid
@@ -159,7 +163,9 @@ service cloud.firestore {
       allow create: if validCompanyWrite(request.resource.data);
       allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
       allow update: if isLegacyMigration()
-        || (sameCompany(resource.data) && request.resource.data.companyId == currentCompany());
+        || (sameCompany(resource.data)
+          && request.resource.data.companyId == currentCompany()
+          && tenantIdentityUnchanged());
       allow delete: if sameCompany(resource.data) || legacyOwned(resource.data);
     }
 
@@ -167,7 +173,9 @@ service cloud.firestore {
       allow create: if validCompanyWrite(request.resource.data);
       allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
       allow update: if isLegacyMigration()
-        || (sameCompany(resource.data) && request.resource.data.companyId == currentCompany());
+        || (sameCompany(resource.data)
+          && request.resource.data.companyId == currentCompany()
+          && tenantIdentityUnchanged());
       allow delete: if sameCompany(resource.data) || legacyOwned(resource.data);
     }
   }
