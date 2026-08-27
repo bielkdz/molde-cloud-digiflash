@@ -23,6 +23,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm test
       - run: npm run build
         env:
           VITE_MICROSOFT_CLIENT_ID: "${{ vars.VITE_MICROSOFT_CLIENT_ID }}"

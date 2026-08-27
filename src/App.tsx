@@ -71,6 +71,8 @@ import {
   type HistoryRecord,
 } from "./workspace";
 import { GlobalApprovals } from "./GlobalApprovals";
+import { useDialog } from "./DialogProvider";
+import { logOperationalError } from "./errorLog";
 
 type Screen =
   | "dashboard"
@@ -376,6 +378,7 @@ function DashboardApp({
   profile: UserProfile;
   notice: string;
 }) {
+  const dialog = useDialog();
   const [screen, setScreen] = useState<Screen>("dashboard"),
     [collapsed, setCollapsed] = useState(true);
   const [folders, setFolders] = useState<FolderRecord[]>([]),
@@ -439,6 +442,9 @@ function DashboardApp({
     }),
     [user.uid, user.displayName, profile.companyId, profile.name],
   );
+  function recordError(operation: string, error: unknown) {
+    void logOperationalError(workspaceActor, operation, error).catch(() => {});
+  }
   const filtered = useMemo(
     () =>
       files.filter((x) =>
@@ -696,7 +702,8 @@ function DashboardApp({
       setNewFolder("");
       setShowFolder(false);
       setMessage("Pasta criada e sincronizada com sucesso.");
-    } catch {
+    } catch (error) {
+      recordError("create_folder", error);
       setMessage(
         "A pasta foi criada no sistema, mas pode estar aguardando sincronização com o OneDrive.",
       );
@@ -705,7 +712,14 @@ function DashboardApp({
     }
   }
   async function editFolder(folder: FolderRecord) {
-    const name = window.prompt("Novo nome da pasta:", folder.name)?.trim();
+    const name = (
+      await dialog.prompt({
+        title: "Renomear pasta",
+        message: "Informe o novo nome da pasta.",
+        initialValue: folder.name,
+        confirmText: "Salvar nome",
+      })
+    )?.trim();
     if (!name || name === folder.name) return;
     if (
       folders.some(
@@ -724,6 +738,7 @@ function DashboardApp({
       await renameFolder(workspaceActor, folder, name);
       setMessage("Pasta renomeada no sistema e no OneDrive.");
     } catch (error) {
+      recordError("rename_folder", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
@@ -735,12 +750,13 @@ function DashboardApp({
       setMessage("Mova ou exclua as fotos desta pasta antes de excluí-la.");
       return;
     }
-    if (
-      !window.confirm(
-        `Excluir a pasta “${folder.name}” do sistema e do OneDrive?`,
-      )
-    )
-      return;
+    const confirmed = await dialog.confirm({
+      title: "Excluir pasta?",
+      message: `A pasta “${folder.name}” será removida do sistema e enviada para a lixeira do OneDrive.`,
+      confirmText: "Excluir pasta",
+      danger: true,
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       if (folder.oneDriveItemId)
@@ -750,13 +766,21 @@ function DashboardApp({
         "Pasta excluída. O OneDrive a mantém na lixeira para recuperação.",
       );
     } catch (error) {
+      recordError("delete_folder", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
     }
   }
   async function renameFile(file: FileRecord) {
-    const name = window.prompt("Novo nome do arquivo:", file.name)?.trim();
+    const name = (
+      await dialog.prompt({
+        title: "Renomear arquivo",
+        message: "Informe o novo nome do arquivo.",
+        initialValue: file.name,
+        confirmText: "Salvar nome",
+      })
+    )?.trim();
     if (!name || name === file.name) return;
     setBusy(true);
     try {
@@ -771,6 +795,7 @@ function DashboardApp({
       );
       setMessage("Arquivo renomeado com sucesso.");
     } catch (error) {
+      recordError("rename_file", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
@@ -782,15 +807,14 @@ function DashboardApp({
       setMessage("Crie outra pasta antes de mover este arquivo.");
       return;
     }
-    const name = window
-      .prompt(
-        `Mover para qual pasta?\n${choices.map((item) => `• ${item.name}`).join("\n")}`,
-      )
-      ?.trim();
-    if (!name) return;
-    const target = choices.find(
-      (item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
-    );
+    const targetId = await dialog.select({
+      title: "Mover arquivo",
+      message: `Escolha a pasta de destino para “${file.name}”.`,
+      confirmText: "Mover arquivo",
+      options: choices.map((item) => ({ value: item.id, label: item.name })),
+    });
+    if (!targetId) return;
+    const target = choices.find((item) => item.id === targetId);
     if (!target) {
       setMessage(
         "Pasta não encontrada. Digite o nome exatamente como aparece na lista.",
@@ -805,13 +829,20 @@ function DashboardApp({
       await moveFileRecord(workspaceActor, file, target, remote?.webUrl);
       setMessage("Arquivo movido com sucesso.");
     } catch (error) {
+      recordError("move_file", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
     }
   }
   async function deleteFile(file: FileRecord) {
-    if (!window.confirm(`Mover “${file.name}” para a lixeira?`)) return;
+    const confirmed = await dialog.confirm({
+      title: "Mover para a lixeira?",
+      message: `O arquivo “${file.name}” poderá ser restaurado posteriormente.`,
+      confirmText: "Mover para lixeira",
+      danger: true,
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       if (file.oneDriveItemId)
@@ -819,6 +850,7 @@ function DashboardApp({
       await removeFileRecord(workspaceActor, file);
       setMessage("Arquivo movido para a lixeira do Molde Cloud.");
     } catch (error) {
+      recordError("delete_file", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
@@ -833,15 +865,20 @@ function DashboardApp({
       await restoreFileRecord(workspaceActor, file, remote?.webUrl);
       setMessage(`“${file.name}” foi restaurado para ${file.folderName}.`);
     } catch (error) {
+      recordError("restore_file", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
     }
   }
   async function permanentlyDeleteFile(file: FileRecord) {
-    const confirmation = window.prompt(
-      `Esta ação não poderá ser desfeita. Digite EXCLUIR para apagar “${file.name}” permanentemente.`,
-    );
+    const confirmation = await dialog.prompt({
+      title: "Excluir definitivamente?",
+      message: `Esta ação não poderá ser desfeita. Digite EXCLUIR para apagar “${file.name}”.`,
+      placeholder: "Digite EXCLUIR",
+      confirmText: "Excluir definitivamente",
+      danger: true,
+    });
     if (confirmation !== "EXCLUIR") return;
     setBusy(true);
     try {
@@ -849,6 +886,7 @@ function DashboardApp({
       await permanentlyDeleteFileRecord(file);
       setMessage("Arquivo excluído permanentemente.");
     } catch (error) {
+      recordError("permanent_delete_file", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
@@ -877,15 +915,14 @@ function DashboardApp({
   async function moveSelectedFiles() {
     const selected = files.filter((item) => selectedFiles.has(item.id));
     if (!selected.length) return;
-    const name = window
-      .prompt(
-        `Mover ${selected.length} arquivo(s) para qual pasta?\n${folders.map((item) => `• ${item.name}`).join("\n")}`,
-      )
-      ?.trim();
-    if (!name) return;
-    const target = folders.find(
-      (item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
-    );
+    const targetId = await dialog.select({
+      title: "Mover arquivos selecionados",
+      message: `Escolha a pasta de destino para ${selected.length} arquivo(s).`,
+      confirmText: "Mover arquivos",
+      options: folders.map((item) => ({ value: item.id, label: item.name })),
+    });
+    if (!targetId) return;
+    const target = folders.find((item) => item.id === targetId);
     if (!target) {
       setMessage(
         "Pasta não encontrada. Digite o nome exatamente como aparece na lista.",
@@ -906,6 +943,7 @@ function DashboardApp({
       setSelectedFiles(new Set());
       setMessage(`${moved} arquivo(s) movido(s) para ${target.name}.`);
     } catch (error) {
+      recordError("bulk_move_files", error);
       setMessage(
         `${moved} arquivo(s) movido(s) antes da interrupção. ${oneDriveErrorMessage(error)}`,
       );
@@ -916,9 +954,13 @@ function DashboardApp({
   async function deleteSelectedFiles() {
     const selected = files.filter((item) => selectedFiles.has(item.id));
     if (!selected.length) return;
-    const confirmation = window.prompt(
-      `Para mover ${selected.length} arquivo(s) para a lixeira, digite EXCLUIR ${selected.length}`,
-    );
+    const confirmation = await dialog.prompt({
+      title: "Excluir arquivos selecionados?",
+      message: `Digite EXCLUIR ${selected.length} para mover ${selected.length} arquivo(s) para a lixeira.`,
+      placeholder: `EXCLUIR ${selected.length}`,
+      confirmText: "Mover para lixeira",
+      danger: true,
+    });
     if (confirmation !== `EXCLUIR ${selected.length}`) return;
     setBusy(true);
     let removed = 0;
@@ -932,6 +974,7 @@ function DashboardApp({
       setSelectedFiles(new Set());
       setMessage(`${removed} arquivo(s) movido(s) para a lixeira.`);
     } catch (error) {
+      recordError("bulk_delete_files", error);
       setMessage(
         `${removed} arquivo(s) movido(s) antes da interrupção. ${oneDriveErrorMessage(error)}`,
       );
@@ -958,6 +1001,7 @@ function DashboardApp({
         `Sincronização concluída: ${result.removedFolders} pasta(s) e ${result.removedFiles} arquivo(s) removido(s); ${result.updated} atualizado(s).`,
       );
     } catch (error) {
+      recordError("synchronize_onedrive", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
@@ -975,6 +1019,7 @@ function DashboardApp({
     try {
       await connectOneDrive(profile.companyId);
     } catch (error) {
+      recordError("connect_onedrive", error);
       setMessage(oneDriveErrorMessage(error));
       setBusy(false);
     } finally {
@@ -1000,6 +1045,7 @@ function DashboardApp({
         setUploadProgress,
       );
     } catch (error) {
+      recordError("upload_photo", error);
       setMessage(oneDriveErrorMessage(error));
       setBusy(false);
       setUploadProgress(null);
@@ -2378,6 +2424,7 @@ function UsersAdmin({
   currentUid: string;
   companyId: string;
 }) {
+  const dialog = useDialog();
   const [users, setUsers] = useState<UserProfile[]>([]),
     [invitations, setInvitations] = useState<EmployeeInvitation[]>([]),
     [email, setEmail] = useState(""),
@@ -2412,7 +2459,13 @@ function UsersAdmin({
     }
   }
   async function cancelInvite(invitation: EmployeeInvitation) {
-    if (!window.confirm(`Cancelar o convite de ${invitation.email}?`)) return;
+    const confirmed = await dialog.confirm({
+      title: "Cancelar convite?",
+      message: `O convite enviado para ${invitation.email} será cancelado.`,
+      confirmText: "Cancelar convite",
+      danger: true,
+    });
+    if (!confirmed) return;
     setMessage("");
     try {
       await cancelEmployeeInvite(invitation.email);
@@ -2431,9 +2484,13 @@ function UsersAdmin({
     }
   }
   async function removeUser(item: UserProfile) {
-    const confirmation = window.prompt(
-      `Para remover o acesso de ${item.name || item.email}, digite REMOVER`,
-    );
+    const confirmation = await dialog.prompt({
+      title: "Remover acesso?",
+      message: `Digite REMOVER para retirar o acesso de ${item.name || item.email}.`,
+      placeholder: "Digite REMOVER",
+      confirmText: "Remover acesso",
+      danger: true,
+    });
     if (confirmation !== "REMOVER") return;
     setMessage("");
     try {
@@ -2559,6 +2616,7 @@ function UsersAdmin({
   );
 }
 function CompaniesAdmin({ currentUid }: { currentUid: string }) {
+  const dialog = useDialog();
   const [companies, setCompanies] = useState<CompanyRecord[]>([]),
     [name, setName] = useState(""),
     [adminEmail, setAdminEmail] = useState(""),
@@ -2608,9 +2666,13 @@ function CompaniesAdmin({ currentUid }: { currentUid: string }) {
     }
   }
   async function remove(company: CompanyRecord) {
-    const confirmation = window.prompt(
-      `Para remover esta empresa, digite exatamente: ${company.name}`,
-    );
+    const confirmation = await dialog.prompt({
+      title: "Remover empresa?",
+      message: `Os dados serão preservados temporariamente. Digite exatamente: ${company.name}`,
+      placeholder: company.name,
+      confirmText: "Remover empresa",
+      danger: true,
+    });
     if (confirmation?.trim() !== company.name) {
       if (confirmation !== null)
         setMessage("O nome digitado não corresponde à empresa.");

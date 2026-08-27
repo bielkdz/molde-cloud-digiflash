@@ -159,6 +159,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /errorLogs/{itemId} {
+      allow create: if validCompanyWrite(request.resource.data)
+        && request.resource.data.keys().hasOnly([
+          "companyId", "userId", "actorName", "operation", "code", "createdAt"
+        ])
+        && request.resource.data.operation is string
+        && request.resource.data.code is string;
+      allow read: if isSuperAdmin()
+        || (isCompanyAdmin() && sameCompany(resource.data));
+      allow update: if false;
+      allow delete: if isSuperAdmin();
+    }
+
     match /folders/{folderId} {
       allow create: if validCompanyWrite(request.resource.data);
       allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
