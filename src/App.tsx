@@ -42,12 +42,14 @@ import {
   downloadOneDriveItem,
   ensureOneDriveFolder,
   getOneDriveAccount,
+  getOneDriveStorage,
   isOneDriveConfigured,
   moveOneDriveItem,
   oneDriveErrorMessage,
   readOneDriveSnapshot,
   renameOneDriveItem,
   uploadPhotoToOneDrive,
+  type OneDriveStorage,
 } from "./onedrive";
 import {
   createFolder,
@@ -395,6 +397,11 @@ function DashboardApp({
   const [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [oneDriveAccount, setOneDriveAccount] = useState("");
+  const [oneDriveMenuOpen, setOneDriveMenuOpen] = useState(false),
+    [oneDriveStorage, setOneDriveStorage] = useState<OneDriveStorage | null>(
+      null,
+    ),
+    [oneDriveStorageLoading, setOneDriveStorageLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine),
@@ -1026,6 +1033,36 @@ function DashboardApp({
       setCollapsed(true);
     }
   }
+  async function loadOneDriveStorage() {
+    if (!oneDriveAccount || oneDriveStorageLoading) return;
+    setOneDriveStorageLoading(true);
+    try {
+      setOneDriveStorage(await getOneDriveStorage());
+    } catch (error) {
+      recordError("read_onedrive_storage", error);
+      setOneDriveStorage(null);
+    } finally {
+      setOneDriveStorageLoading(false);
+    }
+  }
+  function toggleOneDriveMenu() {
+    const next = !oneDriveMenuOpen;
+    setOneDriveMenuOpen(next);
+    setProfileOpen(false);
+    if (next && oneDriveAccount) void loadOneDriveStorage();
+  }
+  async function reconnectOneDrive() {
+    setOneDriveMenuOpen(false);
+    setBusy(true);
+    setMessage("Reconectando sua conta do OneDrive...");
+    try {
+      await connectOneDrive(profile.companyId, "login");
+    } catch (error) {
+      recordError("reconnect_onedrive", error);
+      setMessage(oneDriveErrorMessage(error));
+      setBusy(false);
+    }
+  }
   async function savePhoto() {
     const folder = folders.find((item) => item.id === folderId);
     if (!folder || !photoFile || !fileName.trim()) return;
@@ -1186,9 +1223,13 @@ function DashboardApp({
             <h1>{visibleNav.find((x) => x.id === screen)?.label}</h1>
           </div>
           <div className="header-actions">
-            <div
+            <button
+              type="button"
               className={`status ${oneDriveAccount ? "ok" : ""}`}
               title={oneDriveAccount || undefined}
+              onClick={toggleOneDriveMenu}
+              aria-haspopup="menu"
+              aria-expanded={oneDriveMenuOpen}
             >
               <i />
               {oneDriveAccount
@@ -1196,10 +1237,13 @@ function DashboardApp({
                 : isOneDriveConfigured
                   ? "OneDrive desconectado"
                   : "Ativação pendente"}
-            </div>
+            </button>
             <button
               className="user-chip"
-              onClick={() => setProfileOpen(!profileOpen)}
+              onClick={() => {
+                setOneDriveMenuOpen(false);
+                setProfileOpen(!profileOpen);
+              }}
               title="Abrir perfil"
               aria-haspopup="menu"
               aria-expanded={profileOpen}
@@ -1215,6 +1259,117 @@ function DashboardApp({
                   "Usuário"}
               </b>
             </button>
+            {oneDriveMenuOpen && (
+              <>
+                <button
+                  className="onedrive-menu-backdrop"
+                  aria-label="Fechar opções do OneDrive"
+                  onClick={() => setOneDriveMenuOpen(false)}
+                />
+                <section className="onedrive-menu" role="menu">
+                  <header>
+                    <span className={oneDriveAccount ? "connected" : ""}>
+                      <Icon name="cloud" />
+                    </span>
+                    <div>
+                      <small>ONEDRIVE</small>
+                      <strong>
+                        {oneDriveAccount ? "Conta conectada" : "Desconectado"}
+                      </strong>
+                      <p>{oneDriveAccount || "Conecte a conta da empresa"}</p>
+                    </div>
+                  </header>
+                  {oneDriveAccount && (
+                    <div className="onedrive-storage">
+                      <div>
+                        <span>ARMAZENAMENTO</span>
+                        <strong>
+                          {oneDriveStorageLoading
+                            ? "Consultando..."
+                            : oneDriveStorage
+                              ? `${formatBytes(oneDriveStorage.used)} de ${formatBytes(oneDriveStorage.total)}`
+                              : "Não foi possível consultar"}
+                        </strong>
+                      </div>
+                      {oneDriveStorage?.total ? (
+                        <>
+                          <div className="storage-track">
+                            <i
+                              style={{
+                                width: `${Math.min(100, (oneDriveStorage.used / oneDriveStorage.total) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <small>
+                            {formatBytes(oneDriveStorage.remaining)} disponíveis
+                          </small>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+                  <div className="onedrive-menu-actions">
+                    {oneDriveAccount ? (
+                      <>
+                        <button
+                          role="menuitem"
+                          disabled={busy || !online}
+                          onClick={() => {
+                            setOneDriveMenuOpen(false);
+                            void syncOneDrive();
+                          }}
+                        >
+                          <Icon name="sync" />
+                          <span>
+                            <strong>Sincronizar agora</strong>
+                            <small>Atualizar pastas e arquivos</small>
+                          </span>
+                        </button>
+                        <button
+                          role="menuitem"
+                          disabled={busy || !online}
+                          onClick={() => void reconnectOneDrive()}
+                        >
+                          <Icon name="restore" />
+                          <span>
+                            <strong>Reconectar</strong>
+                            <small>Renovar a autorização desta conta</small>
+                          </span>
+                        </button>
+                        <button
+                          role="menuitem"
+                          disabled={busy || !online}
+                          onClick={() => {
+                            setOneDriveMenuOpen(false);
+                            void handleOneDrive();
+                          }}
+                        >
+                          <Icon name="users" />
+                          <span>
+                            <strong>Trocar de conta</strong>
+                            <small>Selecionar outro OneDrive</small>
+                          </span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        role="menuitem"
+                        disabled={busy || !online}
+                        onClick={() => {
+                          setOneDriveMenuOpen(false);
+                          void handleOneDrive();
+                        }}
+                      >
+                        <Icon name="cloud" />
+                        <span>
+                          <strong>Conectar OneDrive</strong>
+                          <small>Autorizar a conta da empresa</small>
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </section>
+              </>
+            )}
             {profileOpen && (
               <>
                 <button
@@ -2408,9 +2563,12 @@ function FileRow({
     </div>
   );
 }
-function formatBytes(bytes: number) {
-  if (!bytes) return "—";
-  return `${(bytes / 1024 / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 MB";
+  const gigabytes = value / 1024 ** 3;
+  if (gigabytes >= 1)
+    return `${gigabytes.toLocaleString("pt-BR", { maximumFractionDigits: gigabytes >= 100 ? 0 : 1 })} GB`;
+  return `${(value / 1024 ** 2).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
 }
 function formatDate(value?: Date) {
   return value

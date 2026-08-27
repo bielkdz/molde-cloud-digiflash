@@ -1,9 +1,15 @@
-import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo } from "@azure/msal-browser";
+import {
+  InteractionRequiredAuthError,
+  PublicClientApplication,
+  type AccountInfo,
+} from "@azure/msal-browser";
 
 const graphBaseUrl = "https://graph.microsoft.com/v1.0";
 const rootFolderName = "Molde Cloud DigiFlash";
 const scopes = ["Files.ReadWrite", "User.Read"];
-const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() || "2ad90ac1-7b91-46a3-ba52-0093e1e7775e";
+const clientId =
+  import.meta.env.VITE_MICROSOFT_CLIENT_ID?.trim() ||
+  "2ad90ac1-7b91-46a3-ba52-0093e1e7775e";
 const connectionIntentKey = "molde-cloud:onedrive-company";
 const renewalNoticeKey = "molde-cloud:onedrive-renewed";
 
@@ -20,7 +26,20 @@ type DriveItem = OneDriveUpload & { folder?: { childCount?: number } };
 
 export type OneDriveSnapshot = {
   folders: Array<{ id: string; name: string }>;
-  files: Array<{ id: string; name: string; size: number; webUrl: string; folderName: string }>;
+  files: Array<{
+    id: string;
+    name: string;
+    size: number;
+    webUrl: string;
+    folderName: string;
+  }>;
+};
+
+export type OneDriveStorage = {
+  total: number;
+  used: number;
+  remaining: number;
+  state: string;
 };
 
 export const isOneDriveConfigured = Boolean(clientId);
@@ -40,7 +59,8 @@ async function getClient() {
       });
       await client.initialize();
       const redirectResult = await client.handleRedirectPromise();
-      const account = redirectResult?.account ?? client.getAllAccounts()[0] ?? null;
+      const account =
+        redirectResult?.account ?? client.getAllAccounts()[0] ?? null;
       if (account) client.setActiveAccount(account);
       return client;
     })();
@@ -66,7 +86,10 @@ export function consumeOneDriveRenewalNotice() {
   return renewed;
 }
 
-export async function connectOneDrive(companyId: string) {
+export async function connectOneDrive(
+  companyId: string,
+  prompt: "select_account" | "login" = "select_account",
+) {
   // Only an explicit click may define or replace a company's official drive.
   // A Microsoft account restored from browser cache must never claim a company.
   window.sessionStorage.setItem(connectionIntentKey, companyId);
@@ -74,7 +97,7 @@ export async function connectOneDrive(companyId: string) {
   try {
     // Redirect in the main window so the application itself cannot consume the
     // OAuth response inside a popup before MSAL finishes the authentication.
-    await client.loginRedirect({ scopes, prompt: "select_account" });
+    await client.loginRedirect({ scopes, prompt });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (!message.includes("interaction_in_progress")) {
@@ -88,7 +111,7 @@ export async function connectOneDrive(companyId: string) {
     clientPromise = null;
     client = await getClient();
     try {
-      await client.loginRedirect({ scopes, prompt: "select_account" });
+      await client.loginRedirect({ scopes, prompt });
     } catch (retryError) {
       window.sessionStorage.removeItem(connectionIntentKey);
       throw retryError;
@@ -96,29 +119,64 @@ export async function connectOneDrive(companyId: string) {
   }
 }
 
+export async function getOneDriveStorage(): Promise<OneDriveStorage> {
+  const drive = await graph<{ quota?: Partial<OneDriveStorage> }>(
+    "/me/drive?$select=quota",
+  );
+  const quota = drive.quota ?? {};
+  return {
+    total: Number(quota.total) || 0,
+    used: Number(quota.used) || 0,
+    remaining: Number(quota.remaining) || 0,
+    state: typeof quota.state === "string" ? quota.state : "normal",
+  };
+}
+
 export async function disconnectOneDrive() {
   const client = await getClient();
   const account = client.getActiveAccount() ?? client.getAllAccounts()[0];
-  if (account) await client.logoutPopup({ account, mainWindowRedirectUri: `${window.location.origin}/` });
+  if (account)
+    await client.logoutPopup({
+      account,
+      mainWindowRedirectUri: `${window.location.origin}/`,
+    });
 }
 
 async function getAccessToken(account?: AccountInfo | null) {
   const client = await getClient();
-  const selectedAccount = account ?? client.getActiveAccount() ?? client.getAllAccounts()[0];
+  const selectedAccount =
+    account ?? client.getActiveAccount() ?? client.getAllAccounts()[0];
   if (!selectedAccount) throw new Error("onedrive/not-connected");
   try {
-    return (await client.acquireTokenSilent({ scopes, account: selectedAccount })).accessToken;
+    return (
+      await client.acquireTokenSilent({ scopes, account: selectedAccount })
+    ).accessToken;
   } catch (error) {
-    const code = typeof error === "object" && error && "errorCode" in error && typeof error.errorCode === "string"
-      ? error.errorCode
-      : "";
+    const code =
+      typeof error === "object" &&
+      error &&
+      "errorCode" in error &&
+      typeof error.errorCode === "string"
+        ? error.errorCode
+        : "";
     const message = error instanceof Error ? error.message : "";
-    const sessionNeedsRenewal = error instanceof InteractionRequiredAuthError
-      || ["timed_out", "login_required", "interaction_required", "consent_required", "no_tokens_found"].includes(code)
-      || message.includes("timed_out");
+    const sessionNeedsRenewal =
+      error instanceof InteractionRequiredAuthError ||
+      [
+        "timed_out",
+        "login_required",
+        "interaction_required",
+        "consent_required",
+        "no_tokens_found",
+      ].includes(code) ||
+      message.includes("timed_out");
     if (!sessionNeedsRenewal) throw error;
     window.sessionStorage.setItem(renewalNoticeKey, "pending");
-    await client.acquireTokenRedirect({ scopes, account: selectedAccount, prompt: "select_account" });
+    await client.acquireTokenRedirect({
+      scopes,
+      account: selectedAccount,
+      prompt: "select_account",
+    });
     throw new Error("onedrive/session-renewal-started");
   }
 }
@@ -137,44 +195,60 @@ async function graph<T>(path: string, init: RequestInit = {}) {
 }
 
 function safeName(value: string, fallback: string) {
-  const clean = value.replace(/["*:<>?/\\|]/g, "-").replace(/[. ]+$/g, "").trim();
+  const clean = value
+    .replace(/["*:<>?/\\|]/g, "-")
+    .replace(/[. ]+$/g, "")
+    .trim();
   return clean || fallback;
 }
 
 async function findByPath(path: string) {
-  const encodedPath = path.split("/").map((part) => encodeURIComponent(part)).join("/");
+  const encodedPath = path
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
   try {
     return await graph<DriveItem>(`/me/drive/root:/${encodedPath}`);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("onedrive/404:")) return null;
+    if (error instanceof Error && error.message.startsWith("onedrive/404:"))
+      return null;
     throw error;
   }
 }
 
 async function createFolder(parentId: string | null, name: string) {
-  const parentPath = parentId ? `/me/drive/items/${parentId}/children` : "/me/drive/root/children";
+  const parentPath = parentId
+    ? `/me/drive/items/${parentId}/children`
+    : "/me/drive/root/children";
   return graph<DriveItem>(parentPath, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    body: JSON.stringify({
+      name,
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "fail",
+    }),
   });
 }
 
 async function ensureFolders(folderName: string) {
   const safeFolder = safeName(folderName, "Sem pasta");
-  const root = (await findByPath(rootFolderName)) ?? await createFolder(null, rootFolderName);
+  const root =
+    (await findByPath(rootFolderName)) ??
+    (await createFolder(null, rootFolderName));
   const childPath = `${rootFolderName}/${safeFolder}`;
-  const child = (await findByPath(childPath)) ?? await createFolder(root.id, safeFolder);
+  const child =
+    (await findByPath(childPath)) ?? (await createFolder(root.id, safeFolder));
   return child;
 }
 
 async function listChildren(parentId: string) {
-  let path: string | null = `/me/drive/items/${parentId}/children?$select=id,name,size,webUrl,folder&$top=200`;
+  let path: string | null =
+    `/me/drive/items/${parentId}/children?$select=id,name,size,webUrl,folder&$top=200`;
   const items: DriveItem[] = [];
   while (path) {
-    const page: { value: DriveItem[]; "@odata.nextLink"?: string } = path.startsWith("http")
-      ? await graphUrl(path)
-      : await graph(path);
+    const page: { value: DriveItem[]; "@odata.nextLink"?: string } =
+      path.startsWith("http") ? await graphUrl(path) : await graph(path);
     items.push(...page.value);
     const next = page["@odata.nextLink"];
     path = next ?? null;
@@ -184,8 +258,12 @@ async function listChildren(parentId: string) {
 
 async function graphUrl<T>(url: string, init: RequestInit = {}) {
   const token = await getAccessToken();
-  const response = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, ...init.headers } });
-  if (!response.ok) throw new Error(`onedrive/${response.status}:${await response.text()}`);
+  const response = await fetch(url, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...init.headers },
+  });
+  if (!response.ok)
+    throw new Error(`onedrive/${response.status}:${await response.text()}`);
   return response.json() as Promise<T>;
 }
 
@@ -217,15 +295,20 @@ export async function deleteOneDriveItem(itemId: string) {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!response.ok && response.status !== 404) throw new Error(`onedrive/${response.status}:${await response.text()}`);
+  if (!response.ok && response.status !== 404)
+    throw new Error(`onedrive/${response.status}:${await response.text()}`);
 }
 
 export async function downloadOneDriveItem(itemId: string) {
   const token = await getAccessToken();
-  const response = await fetch(`${graphBaseUrl}/me/drive/items/${itemId}/content`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error(`onedrive/${response.status}:${await response.text()}`);
+  const response = await fetch(
+    `${graphBaseUrl}/me/drive/items/${itemId}/content`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!response.ok)
+    throw new Error(`onedrive/${response.status}:${await response.text()}`);
   return response.blob();
 }
 
@@ -233,10 +316,22 @@ export async function readOneDriveSnapshot(): Promise<OneDriveSnapshot> {
   const root = await findByPath(rootFolderName);
   if (!root) return { folders: [], files: [] };
   const children = await listChildren(root.id);
-  const folders = children.filter((item) => item.folder).map((item) => ({ id: item.id, name: item.name }));
-  const nested = await Promise.all(folders.map(async (folder) => (await listChildren(folder.id))
-    .filter((item) => !item.folder)
-    .map((item) => ({ id: item.id, name: item.name, size: item.size, webUrl: item.webUrl, folderName: folder.name }))));
+  const folders = children
+    .filter((item) => item.folder)
+    .map((item) => ({ id: item.id, name: item.name }));
+  const nested = await Promise.all(
+    folders.map(async (folder) =>
+      (await listChildren(folder.id))
+        .filter((item) => !item.folder)
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          size: item.size,
+          webUrl: item.webUrl,
+          folderName: folder.name,
+        })),
+    ),
+  );
   return { folders, files: nested.flat() };
 }
 
@@ -248,7 +343,12 @@ function fileNameWithExtension(name: string, file: File) {
   return `${safeBase}${originalExtension ?? mimeExtension}`;
 }
 
-export async function uploadPhotoToOneDrive(folderName: string, name: string, file: File, onProgress?: (percentage: number) => void) {
+export async function uploadPhotoToOneDrive(
+  folderName: string,
+  name: string,
+  file: File,
+  onProgress?: (percentage: number) => void,
+) {
   if (file.size > 250 * 1024 * 1024) throw new Error("onedrive/file-too-large");
   onProgress?.(5);
   const folder = await ensureFolders(folderName);
@@ -260,9 +360,13 @@ export async function uploadPhotoToOneDrive(folderName: string, name: string, fi
     const request = new XMLHttpRequest();
     request.open("PUT", url);
     request.setRequestHeader("Authorization", `Bearer ${token}`);
-    request.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    request.setRequestHeader(
+      "Content-Type",
+      file.type || "application/octet-stream",
+    );
     request.upload.addEventListener("progress", (event) => {
-      if (event.lengthComputable) onProgress?.(12 + Math.round((event.loaded / event.total) * 86));
+      if (event.lengthComputable)
+        onProgress?.(12 + Math.round((event.loaded / event.total) * 86));
     });
     request.addEventListener("load", () => {
       if (request.status >= 200 && request.status < 300) {
@@ -272,30 +376,60 @@ export async function uploadPhotoToOneDrive(folderName: string, name: string, fi
         reject(new Error(`onedrive/${request.status}:${request.responseText}`));
       }
     });
-    request.addEventListener("error", () => reject(new Error("onedrive/network-error")));
-    request.addEventListener("abort", () => reject(new Error("onedrive/upload-cancelled")));
+    request.addEventListener("error", () =>
+      reject(new Error("onedrive/network-error")),
+    );
+    request.addEventListener("abort", () =>
+      reject(new Error("onedrive/upload-cancelled")),
+    );
     request.send(file);
   });
 }
 
 export function oneDriveErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  const code = typeof error === "object" && error && "errorCode" in error && typeof error.errorCode === "string"
-    ? error.errorCode
-    : "";
-  if (message === "onedrive/not-configured") return "A integração Microsoft ainda precisa receber o ID do aplicativo.";
-  if (message === "onedrive/not-connected") return "Conecte sua conta do OneDrive antes de enviar a foto.";
-  if (message === "onedrive/session-renewal-started") return "A Microsoft está renovando sua sessão. Depois de voltar ao sistema, clique em Sincronizar novamente.";
-  if (message === "onedrive/file-too-large") return "A foto ultrapassa o limite de 250 MB para envio direto.";
-  if (message === "onedrive/network-error") return "A internet caiu durante o envio. A foto não foi registrada; tente novamente quando a conexão voltar.";
-  if (message.includes("user_cancelled") || message.includes("user_cancelled_login")) return "A conexão com o OneDrive foi cancelada.";
-  if (message.includes("monitor_window_timeout") || message.includes("hash_empty_error")) return "A janela da Microsoft não devolveu a autorização. Atualize a página e conecte novamente.";
-  if (message.includes("interaction_in_progress")) return "Havia uma autorização antiga presa no navegador. Feche esta aba, abra o sistema novamente e conecte o OneDrive.";
-  if (code === "timed_out" || message.includes("timed_out")) return "A sessão do OneDrive expirou e precisa ser renovada. Clique em Sincronizar novamente.";
-  if (code === "popup_window_error" || message.includes("popup_window_error")) return "O navegador bloqueou a janela da Microsoft. Atualize a página e tente sincronizar novamente.";
-  if (message.includes("unauthorized_client")) return "O aplicativo Microsoft não está habilitado para esta conta.";
-  if (message.startsWith("onedrive/401:") || message.startsWith("onedrive/403:")) return "A Microsoft não autorizou o acesso aos arquivos. Conecte novamente.";
-  if (message.startsWith("onedrive/507:")) return "O OneDrive está sem espaço disponível.";
+  const code =
+    typeof error === "object" &&
+    error &&
+    "errorCode" in error &&
+    typeof error.errorCode === "string"
+      ? error.errorCode
+      : "";
+  if (message === "onedrive/not-configured")
+    return "A integração Microsoft ainda precisa receber o ID do aplicativo.";
+  if (message === "onedrive/not-connected")
+    return "Conecte sua conta do OneDrive antes de enviar a foto.";
+  if (message === "onedrive/session-renewal-started")
+    return "A Microsoft está renovando sua sessão. Depois de voltar ao sistema, clique em Sincronizar novamente.";
+  if (message === "onedrive/file-too-large")
+    return "A foto ultrapassa o limite de 250 MB para envio direto.";
+  if (message === "onedrive/network-error")
+    return "A internet caiu durante o envio. A foto não foi registrada; tente novamente quando a conexão voltar.";
+  if (
+    message.includes("user_cancelled") ||
+    message.includes("user_cancelled_login")
+  )
+    return "A conexão com o OneDrive foi cancelada.";
+  if (
+    message.includes("monitor_window_timeout") ||
+    message.includes("hash_empty_error")
+  )
+    return "A janela da Microsoft não devolveu a autorização. Atualize a página e conecte novamente.";
+  if (message.includes("interaction_in_progress"))
+    return "Havia uma autorização antiga presa no navegador. Feche esta aba, abra o sistema novamente e conecte o OneDrive.";
+  if (code === "timed_out" || message.includes("timed_out"))
+    return "A sessão do OneDrive expirou e precisa ser renovada. Clique em Sincronizar novamente.";
+  if (code === "popup_window_error" || message.includes("popup_window_error"))
+    return "O navegador bloqueou a janela da Microsoft. Atualize a página e tente sincronizar novamente.";
+  if (message.includes("unauthorized_client"))
+    return "O aplicativo Microsoft não está habilitado para esta conta.";
+  if (
+    message.startsWith("onedrive/401:") ||
+    message.startsWith("onedrive/403:")
+  )
+    return "A Microsoft não autorizou o acesso aos arquivos. Conecte novamente.";
+  if (message.startsWith("onedrive/507:"))
+    return "O OneDrive está sem espaço disponível.";
   return code
     ? `Não foi possível concluir a operação no OneDrive. Código: ${code}.`
     : "Não foi possível concluir a operação no OneDrive. Tente novamente.";
