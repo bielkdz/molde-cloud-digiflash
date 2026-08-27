@@ -1,6 +1,29 @@
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  type Timestamp,
+} from "firebase/firestore";
 import { db } from "./firebase";
 import type { WorkspaceActor } from "./workspace";
+
+export type ErrorLogRecord = {
+  id: string;
+  companyId: string;
+  userId: string;
+  actorName: string;
+  operation: string;
+  code: string;
+  status?: "pending" | "resolved";
+  createdAt?: Timestamp;
+  resolvedAt?: Timestamp;
+  resolvedBy?: string;
+};
 
 export function safeErrorCode(error: unknown) {
   if (typeof error === "object" && error && "errorCode" in error) {
@@ -26,6 +49,41 @@ export async function logOperationalError(
     actorName: actor.name,
     operation: operation.slice(0, 80),
     code: safeErrorCode(error),
+    status: "pending",
     createdAt: serverTimestamp(),
+  });
+}
+
+export function watchErrorLogs(
+  companyId: string | null,
+  callback: (items: ErrorLogRecord[]) => void,
+  onError: (message: string) => void,
+) {
+  const source = companyId
+    ? query(collection(db, "errorLogs"), where("companyId", "==", companyId))
+    : collection(db, "errorLogs");
+  return onSnapshot(
+    source,
+    (snapshot) =>
+      callback(
+        snapshot.docs
+          .map((item) => ({
+            id: item.id,
+            ...(item.data() as Omit<ErrorLogRecord, "id">),
+          }))
+          .sort(
+            (a, b) =>
+              (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0),
+          ),
+      ),
+    () => onError("Não foi possível carregar os registros técnicos."),
+  );
+}
+
+export async function resolveErrorLog(id: string, userId: string) {
+  await updateDoc(doc(db, "errorLogs", id), {
+    status: "resolved",
+    resolvedAt: serverTimestamp(),
+    resolvedBy: userId,
   });
 }

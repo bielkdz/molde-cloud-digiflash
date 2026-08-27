@@ -74,7 +74,12 @@ import {
 } from "./workspace";
 import { GlobalApprovals } from "./GlobalApprovals";
 import { useDialog } from "./DialogProvider";
-import { logOperationalError } from "./errorLog";
+import {
+  logOperationalError,
+  resolveErrorLog,
+  watchErrorLogs,
+  type ErrorLogRecord,
+} from "./errorLog";
 
 type Screen =
   | "dashboard"
@@ -82,6 +87,7 @@ type Screen =
   | "files"
   | "history"
   | "search"
+  | "errors"
   | "users"
   | "companies";
 type InstallPromptEvent = Event & {
@@ -435,11 +441,16 @@ function DashboardApp({
     profile.role === "superadmin"
       ? [
           ...nav,
+          { id: "errors" as Screen, label: "Erros", icon: "alert" },
           { id: "users" as Screen, label: "Usuários", icon: "users" },
           { id: "companies" as Screen, label: "Empresas", icon: "building" },
         ]
       : profile.role === "admin"
-        ? [...nav, { id: "users" as Screen, label: "Usuários", icon: "users" }]
+        ? [
+            ...nav,
+            { id: "errors" as Screen, label: "Erros", icon: "alert" },
+            { id: "users" as Screen, label: "Usuários", icon: "users" },
+          ]
         : nav;
   const workspaceActor = useMemo(
     () => ({
@@ -608,6 +619,11 @@ function DashboardApp({
         restoreCurrentEntry();
         return;
       }
+      if (oneDriveMenuOpen) {
+        setOneDriveMenuOpen(false);
+        restoreCurrentEntry();
+        return;
+      }
       if (!collapsed) {
         setCollapsed(true);
         restoreCurrentEntry();
@@ -628,7 +644,15 @@ function DashboardApp({
     };
     window.addEventListener("popstate", goBackInsideApp);
     return () => window.removeEventListener("popstate", goBackInsideApp);
-  }, [collapsed, mobileActions, previewFile, profileOpen, screen, showFolder]);
+  }, [
+    collapsed,
+    mobileActions,
+    oneDriveMenuOpen,
+    previewFile,
+    profileOpen,
+    screen,
+    showFolder,
+  ]);
   useEffect(() => {
     if (!folders.some((item) => item.id === folderId))
       setFolderId(folders[0]?.id ?? "");
@@ -1848,6 +1872,14 @@ function DashboardApp({
           (profile.role === "admin" || profile.role === "superadmin") && (
             <UsersAdmin currentUid={user.uid} companyId={profile.companyId} />
           )}
+        {screen === "errors" &&
+          (profile.role === "admin" || profile.role === "superadmin") && (
+            <ErrorPanel
+              companyId={profile.companyId}
+              currentUid={user.uid}
+              superAdmin={profile.role === "superadmin"}
+            />
+          )}
         {screen === "companies" && profile.role === "superadmin" && (
           <>
             <GlobalApprovals currentUid={user.uid} />
@@ -2575,6 +2607,276 @@ function formatDate(value?: Date) {
     ? value.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
     : "Agora";
 }
+function ErrorPanel({
+  companyId,
+  currentUid,
+  superAdmin,
+}: {
+  companyId: string;
+  currentUid: string;
+  superAdmin: boolean;
+}) {
+  const dialog = useDialog();
+  const [items, setItems] = useState<ErrorLogRecord[]>([]),
+    [query, setQuery] = useState(""),
+    [statusFilter, setStatusFilter] = useState("all"),
+    [operationFilter, setOperationFilter] = useState("all"),
+    [periodFilter, setPeriodFilter] = useState("7"),
+    [loading, setLoading] = useState(true),
+    [message, setMessage] = useState("");
+  useEffect(
+    () =>
+      watchErrorLogs(
+        superAdmin ? null : companyId,
+        (records) => {
+          setItems(records);
+          setLoading(false);
+        },
+        (error) => {
+          setMessage(error);
+          setLoading(false);
+        },
+      ),
+    [companyId, superAdmin],
+  );
+  const now = Date.now(),
+    sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const recentItems = items.filter(
+    (item) => (item.createdAt?.toMillis() ?? now) >= sevenDaysAgo,
+  );
+  const occurrenceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of recentItems) {
+      const key = `${item.operation}:${item.code}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  }, [recentItems]);
+  const operations = [...new Set(items.map((item) => item.operation))].sort();
+  const filteredItems = items.filter((item) => {
+    const created = item.createdAt?.toMillis() ?? now;
+    const periodStart =
+      periodFilter === "today"
+        ? new Date().setHours(0, 0, 0, 0)
+        : periodFilter === "7"
+          ? sevenDaysAgo
+          : 0;
+    const resolved = item.status === "resolved";
+    const recurrent =
+      !resolved &&
+      (occurrenceCounts.get(`${item.operation}:${item.code}`) ?? 0) > 1;
+    const calculatedStatus = resolved
+      ? "resolved"
+      : recurrent
+        ? "recurrent"
+        : "pending";
+    return (
+      created >= periodStart &&
+      (statusFilter === "all" || statusFilter === calculatedStatus) &&
+      (operationFilter === "all" || item.operation === operationFilter) &&
+      `${operationLabel(item.operation)} ${item.code} ${item.actorName} ${item.companyId}`
+        .toLowerCase()
+        .includes(query.toLowerCase())
+    );
+  });
+  async function showDetails(item: ErrorLogRecord) {
+    const resolved = item.status === "resolved";
+    const shouldResolve = await dialog.confirm({
+      title: operationLabel(item.operation),
+      message: [
+        `Código: ${item.code}`,
+        `Empresa: ${item.companyId}`,
+        `Usuário: ${item.actorName || "Não identificado"}`,
+        `Registrado: ${formatDate(item.createdAt?.toDate())}`,
+        resolved
+          ? `Resolvido: ${formatDate(item.resolvedAt?.toDate())}`
+          : "Nenhuma foto ou conteúdo foi armazenado.",
+      ].join("\n"),
+      confirmText: resolved ? "Fechar" : "Marcar como resolvido",
+      cancelText: resolved ? "Voltar" : "Cancelar",
+    });
+    if (!shouldResolve || resolved) return;
+    try {
+      await resolveErrorLog(item.id, currentUid);
+      setMessage("Registro marcado como resolvido.");
+    } catch {
+      setMessage("Não foi possível atualizar este registro.");
+    }
+  }
+  return (
+    <section className="error-panel-page">
+      {message && <div className="system-notice">{message}</div>}
+      <div className="error-summary-grid">
+        <article className="pending">
+          <span>
+            <Icon name="alert" />
+          </span>
+          <div>
+            <small>ERROS HOJE</small>
+            <strong>
+              {
+                items.filter(
+                  (item) =>
+                    (item.createdAt?.toDate().toDateString() ?? "") ===
+                    new Date().toDateString(),
+                ).length
+              }
+            </strong>
+          </div>
+        </article>
+        <article className="recurrent">
+          <span>
+            <Icon name="clock" />
+          </span>
+          <div>
+            <small>ÚLTIMOS 7 DIAS</small>
+            <strong>{recentItems.length}</strong>
+          </div>
+        </article>
+        <article className="resolved">
+          <span>✓</span>
+          <div>
+            <small>RESOLVIDOS</small>
+            <strong>
+              {items.filter((item) => item.status === "resolved").length}
+            </strong>
+          </div>
+        </article>
+      </div>
+      <section className="panel error-records">
+        <div className="error-records-heading">
+          <div>
+            <small>ADMINISTRAÇÃO</small>
+            <h2>Registros técnicos</h2>
+          </div>
+          <button
+            className="outline"
+            onClick={() => setMessage("Painel atualizado em tempo real.")}
+          >
+            <Icon name="sync" /> Atualizar
+          </button>
+        </div>
+        <div className="error-filters">
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            aria-label="Filtrar por situação"
+          >
+            <option value="all">Todos os status</option>
+            <option value="pending">Pendentes</option>
+            <option value="recurrent">Recorrentes</option>
+            <option value="resolved">Resolvidos</option>
+          </select>
+          <select
+            value={operationFilter}
+            onChange={(event) => setOperationFilter(event.target.value)}
+            aria-label="Filtrar por operação"
+          >
+            <option value="all">Todas as operações</option>
+            {operations.map((operation) => (
+              <option key={operation} value={operation}>
+                {operationLabel(operation)}
+              </option>
+            ))}
+          </select>
+          <select
+            value={periodFilter}
+            onChange={(event) => setPeriodFilter(event.target.value)}
+            aria-label="Filtrar por período"
+          >
+            <option value="today">Hoje</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="all">Todo o período</option>
+          </select>
+          <label className="error-search">
+            <Icon name="search" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Pesquisar..."
+            />
+          </label>
+        </div>
+        <div className="error-table-heading">
+          <span>Status</span>
+          <span>Operação</span>
+          <span>Código</span>
+          <span>Empresa</span>
+          <span>Usuário</span>
+          <span>Data / hora</span>
+          <span>Ação</span>
+        </div>
+        {loading ? (
+          <div className="empty">Carregando registros...</div>
+        ) : filteredItems.length ? (
+          filteredItems.map((item) => {
+            const resolved = item.status === "resolved";
+            const recurrent =
+              !resolved &&
+              (occurrenceCounts.get(`${item.operation}:${item.code}`) ?? 0) > 1;
+            const status = resolved
+              ? "resolved"
+              : recurrent
+                ? "recurrent"
+                : "pending";
+            return (
+              <article className="error-row" key={item.id}>
+                <span className={`error-status ${status}`}>
+                  {status === "resolved"
+                    ? "Resolvido"
+                    : status === "recurrent"
+                      ? "Recorrente"
+                      : "Pendente"}
+                </span>
+                <strong data-label="Operação">
+                  {operationLabel(item.operation)}
+                </strong>
+                <code data-label="Código">{item.code}</code>
+                <span data-label="Empresa">{item.companyId}</span>
+                <span data-label="Usuário">{item.actorName || "Usuário"}</span>
+                <time data-label="Data / hora">
+                  {formatDate(item.createdAt?.toDate())}
+                </time>
+                <button
+                  className="outline"
+                  onClick={() => void showDetails(item)}
+                >
+                  Ver detalhes
+                </button>
+              </article>
+            );
+          })
+        ) : (
+          <div className="empty">Nenhum registro encontrado.</div>
+        )}
+        <footer className="error-privacy">
+          <span>i</span> Somente informações técnicas. Fotos e conteúdos não são
+          armazenados.
+        </footer>
+      </section>
+    </section>
+  );
+}
+function operationLabel(operation: string) {
+  const labels: Record<string, string> = {
+    synchronize_onedrive: "Sincronização do OneDrive",
+    connect_onedrive: "Conexão do OneDrive",
+    reconnect_onedrive: "Reconexão do OneDrive",
+    read_onedrive_storage: "Consulta de armazenamento",
+    upload_photo: "Envio de fotografia",
+    create_folder: "Criação de pasta",
+    rename_folder: "Renomeação de pasta",
+    delete_folder: "Exclusão de pasta",
+    rename_file: "Renomeação de arquivo",
+    move_file: "Movimentação de arquivo",
+    delete_file: "Exclusão de arquivo",
+    restore_file: "Restauração de arquivo",
+    permanent_delete_file: "Exclusão definitiva",
+    bulk_move_files: "Movimentação em lote",
+    bulk_delete_files: "Exclusão em lote",
+  };
+  return labels[operation] ?? operation.replaceAll("_", " ");
+}
 function UsersAdmin({
   currentUid,
   companyId,
@@ -3021,6 +3323,12 @@ function Icon({ name }: { name: string }) {
       </>
     ),
     cloud: <path d="M7 19h11a4 4 0 0 0 .5-8A7 7 0 0 0 5 9.5 5 5 0 0 0 7 19Z" />,
+    alert: (
+      <>
+        <path d="M12 3 2.8 20h18.4Z" />
+        <path d="M12 9v4M12 17h.01" />
+      </>
+    ),
     desktop: (
       <>
         <rect x="2" y="4" width="20" height="14" rx="2" />

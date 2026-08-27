@@ -119,6 +119,7 @@ describe("registro técnico seguro", () => {
         actorName: "Usuário A",
         operation: "synchronize_onedrive",
         code: "onedrive/403",
+        status: "pending",
         createdAt: serverTimestamp(),
       }),
     );
@@ -129,9 +130,41 @@ describe("registro técnico seguro", () => {
         actorName: "Usuário A",
         operation: "upload_photo",
         code: "error",
+        status: "pending",
         fileContent: "conteúdo proibido",
         createdAt: serverTimestamp(),
       }),
+    );
+  });
+
+  it("permite somente ao administrador da empresa resolver o registro", async () => {
+    let logId = "";
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const reference = await addDoc(
+        collection(context.firestore(), "errorLogs"),
+        {
+          companyId: "company-a",
+          userId: "user-a",
+          actorName: "Usuário A",
+          operation: "upload_photo",
+          code: "network_error",
+          status: "pending",
+          createdAt: serverTimestamp(),
+        },
+      );
+      logId = reference.id;
+    });
+    const adminDb = environment.authenticatedContext("admin-a").firestore();
+    await assertSucceeds(
+      updateDoc(doc(adminDb, "errorLogs", logId), {
+        status: "resolved",
+        resolvedAt: serverTimestamp(),
+        resolvedBy: "admin-a",
+      }),
+    );
+    const userDb = environment.authenticatedContext("user-a").firestore();
+    await assertFails(
+      updateDoc(doc(userDb, "errorLogs", logId), { code: "alterado" }),
     );
   });
 });

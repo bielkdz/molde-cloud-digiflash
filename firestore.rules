@@ -162,13 +162,19 @@ service cloud.firestore {
     match /errorLogs/{itemId} {
       allow create: if validCompanyWrite(request.resource.data)
         && request.resource.data.keys().hasOnly([
-          "companyId", "userId", "actorName", "operation", "code", "createdAt"
+          "companyId", "userId", "actorName", "operation", "code", "status", "createdAt"
         ])
         && request.resource.data.operation is string
-        && request.resource.data.code is string;
+        && request.resource.data.code is string
+        && request.resource.data.status == "pending";
       allow read: if isSuperAdmin()
         || (isCompanyAdmin() && sameCompany(resource.data));
-      allow update: if false;
+      allow update: if (isSuperAdmin() || (isCompanyAdmin() && sameCompany(resource.data)))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "status", "resolvedAt", "resolvedBy"
+        ])
+        && request.resource.data.status == "resolved"
+        && request.resource.data.resolvedBy == request.auth.uid;
       allow delete: if isSuperAdmin();
     }
 
