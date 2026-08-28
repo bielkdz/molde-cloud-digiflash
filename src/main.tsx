@@ -20,6 +20,42 @@ if ("serviceWorker" in navigator) {
         sessionStorage.setItem("molde-cloud:update-ready", "yes");
         window.dispatchEvent(new Event("molde-cloud:update-ready"));
       };
+      const currentBundle = document.querySelector<HTMLScriptElement>(
+        'script[type="module"][src*="/assets/index-"]',
+      )?.src;
+      const checkForUpdate = () => {
+        void registration
+          .update()
+          .then(() => {
+            if (registration.waiting) announceUpdate();
+          })
+          .catch(() => {});
+
+        if (!navigator.onLine || document.visibilityState === "hidden") return;
+        void fetch(`/?molde-cloud-update-check=${Date.now()}`, {
+          cache: "no-store",
+        })
+          .then((response) => response.text())
+          .then((html) => {
+            const nextDocument = new DOMParser().parseFromString(
+              html,
+              "text/html",
+            );
+            const nextBundle = nextDocument
+              .querySelector<HTMLScriptElement>(
+                'script[type="module"][src*="/assets/index-"]',
+              )
+              ?.getAttribute("src");
+            if (
+              currentBundle &&
+              nextBundle &&
+              new URL(nextBundle, window.location.origin).href !== currentBundle
+            )
+              announceUpdate();
+          })
+          .catch(() => {});
+      };
+
       if (registration.waiting) announceUpdate();
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
@@ -31,6 +67,15 @@ if ("serviceWorker" in navigator) {
             announceUpdate();
         });
       });
+
+      const checkWhenVisible = () => {
+        if (document.visibilityState === "visible") checkForUpdate();
+      };
+      window.addEventListener("focus", checkForUpdate);
+      window.addEventListener("online", checkForUpdate);
+      document.addEventListener("visibilitychange", checkWhenVisible);
+      window.setInterval(checkForUpdate, 5 * 60 * 1000);
+      checkForUpdate();
     });
   });
   navigator.serviceWorker.addEventListener("controllerchange", () => {
