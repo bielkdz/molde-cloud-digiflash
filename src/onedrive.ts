@@ -242,6 +242,32 @@ async function ensureFolders(folderName: string) {
   return child;
 }
 
+async function moveItemToParent(itemId: string, parentId: string) {
+  return graph<DriveItem>(`/me/drive/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ parentReference: { id: parentId } }),
+  });
+}
+
+export async function moveOneDriveFolderToTrash(itemId: string) {
+  const root =
+    (await findByPath(rootFolderName)) ??
+    (await createFolder(null, rootFolderName));
+  const trashPath = `${rootFolderName}/Lixeira de pastas`;
+  const trash =
+    (await findByPath(trashPath)) ??
+    (await createFolder(root.id, "Lixeira de pastas"));
+  return moveItemToParent(itemId, trash.id);
+}
+
+export async function restoreOneDriveFolder(itemId: string) {
+  const root =
+    (await findByPath(rootFolderName)) ??
+    (await createFolder(null, rootFolderName));
+  return moveItemToParent(itemId, root.id);
+}
+
 async function listChildren(parentId: string) {
   let path: string | null =
     `/me/drive/items/${parentId}/children?$select=id,name,size,webUrl,folder&$top=200`;

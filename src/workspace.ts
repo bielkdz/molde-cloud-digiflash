@@ -21,6 +21,8 @@ export type FolderRecord = {
   oneDriveItemId?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  deletedAt?: Timestamp;
+  deletedByName?: string;
 };
 
 export type FileRecord = {
@@ -40,6 +42,7 @@ export type FileRecord = {
   createdAt?: Timestamp;
   deletedAt?: Timestamp;
   deletedByName?: string;
+  deletedWithFolderId?: string;
 };
 
 export type HistoryRecord = {
@@ -47,7 +50,18 @@ export type HistoryRecord = {
   companyId: string;
   userId: string;
   actorName?: string;
-  action: "folder_created" | "folder_renamed" | "folder_deleted" | "photo_registered" | "photo_uploaded" | "photo_renamed" | "photo_moved" | "photo_deleted" | "photo_restored" | "workspace_synced";
+  action:
+    | "folder_created"
+    | "folder_renamed"
+    | "folder_deleted"
+    | "folder_restored"
+    | "photo_registered"
+    | "photo_uploaded"
+    | "photo_renamed"
+    | "photo_moved"
+    | "photo_deleted"
+    | "photo_restored"
+    | "workspace_synced";
   title: string;
   detail: string;
   createdAt?: Timestamp;
@@ -57,46 +71,119 @@ function timestampValue(value?: Timestamp) {
   return value?.toMillis() ?? 0;
 }
 
-export type WorkspaceActor = { userId: string; companyId: string; name: string };
+export type WorkspaceActor = {
+  userId: string;
+  companyId: string;
+  name: string;
+};
 
-function watchCompanyCollection<T extends { id: string; createdAt?: Timestamp }>(
+function watchCompanyCollection<
+  T extends { id: string; createdAt?: Timestamp },
+>(
   name: "folders" | "files" | "history",
   companyId: string,
   onChange: (items: T[]) => void,
   onError: (message: string) => void,
 ) {
-  const ownedQuery = query(collection(db, name), where("companyId", "==", companyId));
+  const ownedQuery = query(
+    collection(db, name),
+    where("companyId", "==", companyId),
+  );
   return onSnapshot(
     ownedQuery,
     (snapshot) => {
       const items = snapshot.docs
         .map((item) => ({ id: item.id, ...item.data() }) as T)
-        .sort((a, b) => timestampValue(b.createdAt) - timestampValue(a.createdAt));
+        .sort(
+          (a, b) => timestampValue(b.createdAt) - timestampValue(a.createdAt),
+        );
       onChange(items);
     },
-    () => onError(`Não foi possível carregar ${name === "folders" ? "as pastas" : name === "files" ? "os arquivos" : "o histórico"}.`),
+    () =>
+      onError(
+        `Não foi possível carregar ${name === "folders" ? "as pastas" : name === "files" ? "os arquivos" : "o histórico"}.`,
+      ),
   );
 }
 
-export function watchFolders(companyId: string, onChange: (items: FolderRecord[]) => void, onError: (message: string) => void) {
-  return watchCompanyCollection<FolderRecord>("folders", companyId, onChange, onError);
+export function watchFolders(
+  companyId: string,
+  onChange: (items: FolderRecord[]) => void,
+  onError: (message: string) => void,
+) {
+  return watchCompanyCollection<FolderRecord>(
+    "folders",
+    companyId,
+    (items) => onChange(items.filter((item) => !item.deletedAt)),
+    onError,
+  );
 }
 
-export function watchFiles(companyId: string, onChange: (items: FileRecord[]) => void, onError: (message: string) => void) {
-  return watchCompanyCollection<FileRecord>("files", companyId, (items) => onChange(items.filter((item) => !item.deletedAt)), onError);
+export function watchDeletedFolders(
+  companyId: string,
+  onChange: (items: FolderRecord[]) => void,
+  onError: (message: string) => void,
+) {
+  return watchCompanyCollection<FolderRecord>(
+    "folders",
+    companyId,
+    (items) => onChange(items.filter((item) => Boolean(item.deletedAt))),
+    onError,
+  );
 }
 
-export function watchDeletedFiles(companyId: string, onChange: (items: FileRecord[]) => void, onError: (message: string) => void) {
-  return watchCompanyCollection<FileRecord>("files", companyId, (items) => onChange(items.filter((item) => Boolean(item.deletedAt))), onError);
+export function watchFiles(
+  companyId: string,
+  onChange: (items: FileRecord[]) => void,
+  onError: (message: string) => void,
+) {
+  return watchCompanyCollection<FileRecord>(
+    "files",
+    companyId,
+    (items) => onChange(items.filter((item) => !item.deletedAt)),
+    onError,
+  );
 }
 
-export function watchHistory(companyId: string, onChange: (items: HistoryRecord[]) => void, onError: (message: string) => void) {
-  return watchCompanyCollection<HistoryRecord>("history", companyId, onChange, onError);
+export function watchDeletedFiles(
+  companyId: string,
+  onChange: (items: FileRecord[]) => void,
+  onError: (message: string) => void,
+) {
+  return watchCompanyCollection<FileRecord>(
+    "files",
+    companyId,
+    (items) =>
+      onChange(
+        items.filter(
+          (item) => Boolean(item.deletedAt) && !item.deletedWithFolderId,
+        ),
+      ),
+    onError,
+  );
 }
 
-export async function migrateLegacyWorkspace(userId: string, companyId: string) {
+export function watchHistory(
+  companyId: string,
+  onChange: (items: HistoryRecord[]) => void,
+  onError: (message: string) => void,
+) {
+  return watchCompanyCollection<HistoryRecord>(
+    "history",
+    companyId,
+    onChange,
+    onError,
+  );
+}
+
+export async function migrateLegacyWorkspace(
+  userId: string,
+  companyId: string,
+) {
   for (const name of ["folders", "files", "history"] as const) {
-    const snapshot = await getDocs(query(collection(db, name), where("userId", "==", userId)));
+    const snapshot = await getDocs(
+      query(collection(db, name), where("userId", "==", userId)),
+    );
     const legacy = snapshot.docs.filter((item) => !item.data().companyId);
     if (!legacy.length) continue;
     const batch = writeBatch(db);
@@ -130,22 +217,46 @@ export async function createFolder(actor: WorkspaceActor, name: string) {
   return folderRef.id;
 }
 
-export async function linkFolderToOneDrive(folderId: string, oneDriveItemId: string) {
-  await writeBatchWithUpdate(doc(db, "folders", folderId), { oneDriveItemId, updatedAt: serverTimestamp() });
+export async function linkFolderToOneDrive(
+  folderId: string,
+  oneDriveItemId: string,
+) {
+  await writeBatchWithUpdate(doc(db, "folders", folderId), {
+    oneDriveItemId,
+    updatedAt: serverTimestamp(),
+  });
 }
 
-async function writeBatchWithUpdate(reference: ReturnType<typeof doc>, data: Record<string, unknown>) {
+async function writeBatchWithUpdate(
+  reference: ReturnType<typeof doc>,
+  data: Record<string, unknown>,
+) {
   const batch = writeBatch(db);
   batch.update(reference, data);
   await batch.commit();
 }
 
-export async function renameFolder(actor: WorkspaceActor, folder: FolderRecord, name: string) {
+export async function renameFolder(
+  actor: WorkspaceActor,
+  folder: FolderRecord,
+  name: string,
+) {
   const nextName = name.trim();
-  const filesSnapshot = await getDocs(query(collection(db, "files"), where("companyId", "==", actor.companyId), where("folderId", "==", folder.id)));
+  const filesSnapshot = await getDocs(
+    query(
+      collection(db, "files"),
+      where("companyId", "==", actor.companyId),
+      where("folderId", "==", folder.id),
+    ),
+  );
   const batch = writeBatch(db);
-  batch.update(doc(db, "folders", folder.id), { name: nextName, updatedAt: serverTimestamp() });
-  filesSnapshot.docs.forEach((file) => batch.update(file.ref, { folderName: nextName }));
+  batch.update(doc(db, "folders", folder.id), {
+    name: nextName,
+    updatedAt: serverTimestamp(),
+  });
+  filesSnapshot.docs.forEach((file) =>
+    batch.update(file.ref, { folderName: nextName }),
+  );
   batch.set(doc(collection(db, "history")), {
     companyId: actor.companyId,
     userId: actor.userId,
@@ -158,9 +269,29 @@ export async function renameFolder(actor: WorkspaceActor, folder: FolderRecord, 
   await batch.commit();
 }
 
-export async function removeFolder(actor: WorkspaceActor, folder: FolderRecord) {
+export async function removeFolder(
+  actor: WorkspaceActor,
+  folder: FolderRecord,
+) {
+  const filesSnapshot = await getDocs(
+    query(
+      collection(db, "files"),
+      where("companyId", "==", actor.companyId),
+      where("folderId", "==", folder.id),
+    ),
+  );
   const batch = writeBatch(db);
-  batch.delete(doc(db, "folders", folder.id));
+  batch.update(doc(db, "folders", folder.id), {
+    deletedAt: serverTimestamp(),
+    deletedByName: actor.name,
+  });
+  filesSnapshot.docs.forEach((file) =>
+    batch.update(file.ref, {
+      deletedAt: serverTimestamp(),
+      deletedByName: actor.name,
+      deletedWithFolderId: folder.id,
+    }),
+  );
   batch.set(doc(collection(db, "history")), {
     companyId: actor.companyId,
     userId: actor.userId,
@@ -170,6 +301,59 @@ export async function removeFolder(actor: WorkspaceActor, folder: FolderRecord) 
     detail: `${folder.name} · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
+  await batch.commit();
+}
+
+export async function restoreFolder(
+  actor: WorkspaceActor,
+  folder: FolderRecord,
+) {
+  const filesSnapshot = await getDocs(
+    query(
+      collection(db, "files"),
+      where("companyId", "==", actor.companyId),
+      where("deletedWithFolderId", "==", folder.id),
+    ),
+  );
+  const batch = writeBatch(db);
+  batch.update(doc(db, "folders", folder.id), {
+    deletedAt: deleteField(),
+    deletedByName: deleteField(),
+    updatedAt: serverTimestamp(),
+  });
+  filesSnapshot.docs.forEach((file) =>
+    batch.update(file.ref, {
+      deletedAt: deleteField(),
+      deletedByName: deleteField(),
+      deletedWithFolderId: deleteField(),
+    }),
+  );
+  batch.set(doc(collection(db, "history")), {
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
+    action: "folder_restored",
+    title: "Pasta restaurada",
+    detail: `${folder.name} · ${actor.name}`,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function permanentlyDeleteFolderRecord(
+  actor: WorkspaceActor,
+  folder: FolderRecord,
+) {
+  const filesSnapshot = await getDocs(
+    query(
+      collection(db, "files"),
+      where("companyId", "==", actor.companyId),
+      where("folderId", "==", folder.id),
+    ),
+  );
+  const batch = writeBatch(db);
+  filesSnapshot.docs.forEach((file) => batch.delete(file.ref));
+  batch.delete(doc(db, "folders", folder.id));
   await batch.commit();
 }
 
@@ -208,38 +392,80 @@ export async function registerPhoto(
   await batch.commit();
 }
 
-export async function renameFileRecord(actor: WorkspaceActor, file: FileRecord, name: string, webUrl?: string) {
+export async function renameFileRecord(
+  actor: WorkspaceActor,
+  file: FileRecord,
+  name: string,
+  webUrl?: string,
+) {
   const nextName = name.trim();
   const batch = writeBatch(db);
-  batch.update(doc(db, "files", file.id), { name: nextName, ...(webUrl ? { oneDriveWebUrl: webUrl } : {}) });
+  batch.update(doc(db, "files", file.id), {
+    name: nextName,
+    ...(webUrl ? { oneDriveWebUrl: webUrl } : {}),
+  });
   batch.set(doc(collection(db, "history")), {
-    companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "photo_renamed",
-    title: "Foto renomeada", detail: `${file.name} → ${nextName} · ${actor.name}`, createdAt: serverTimestamp(),
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
+    action: "photo_renamed",
+    title: "Foto renomeada",
+    detail: `${file.name} → ${nextName} · ${actor.name}`,
+    createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
 
-export async function moveFileRecord(actor: WorkspaceActor, file: FileRecord, folder: FolderRecord, webUrl?: string) {
+export async function moveFileRecord(
+  actor: WorkspaceActor,
+  file: FileRecord,
+  folder: FolderRecord,
+  webUrl?: string,
+) {
   const batch = writeBatch(db);
-  batch.update(doc(db, "files", file.id), { folderId: folder.id, folderName: folder.name, ...(webUrl ? { oneDriveWebUrl: webUrl } : {}) });
+  batch.update(doc(db, "files", file.id), {
+    folderId: folder.id,
+    folderName: folder.name,
+    ...(webUrl ? { oneDriveWebUrl: webUrl } : {}),
+  });
   batch.set(doc(collection(db, "history")), {
-    companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "photo_moved",
-    title: "Foto movida", detail: `${file.name} · ${file.folderName} → ${folder.name} · ${actor.name}`, createdAt: serverTimestamp(),
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
+    action: "photo_moved",
+    title: "Foto movida",
+    detail: `${file.name} · ${file.folderName} → ${folder.name} · ${actor.name}`,
+    createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
 
-export async function removeFileRecord(actor: WorkspaceActor, file: FileRecord) {
+export async function removeFileRecord(
+  actor: WorkspaceActor,
+  file: FileRecord,
+) {
   const batch = writeBatch(db);
-  batch.update(doc(db, "files", file.id), { deletedAt: serverTimestamp(), deletedByName: actor.name });
+  batch.update(doc(db, "files", file.id), {
+    deletedAt: serverTimestamp(),
+    deletedByName: actor.name,
+  });
   batch.set(doc(collection(db, "history")), {
-    companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "photo_deleted",
-    title: "Foto excluída", detail: `${file.name} · ${file.folderName} · ${actor.name}`, createdAt: serverTimestamp(),
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
+    action: "photo_deleted",
+    title: "Foto excluída",
+    detail: `${file.name} · ${file.folderName} · ${actor.name}`,
+    createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
 
-export async function restoreFileRecord(actor: WorkspaceActor, file: FileRecord, webUrl?: string) {
+export async function restoreFileRecord(
+  actor: WorkspaceActor,
+  file: FileRecord,
+  webUrl?: string,
+) {
   const batch = writeBatch(db);
   batch.update(doc(db, "files", file.id), {
     deletedAt: deleteField(),
@@ -247,8 +473,13 @@ export async function restoreFileRecord(actor: WorkspaceActor, file: FileRecord,
     ...(webUrl ? { oneDriveWebUrl: webUrl } : {}),
   });
   batch.set(doc(collection(db, "history")), {
-    companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "photo_restored",
-    title: "Foto restaurada", detail: `${file.name} · ${file.folderName} · ${actor.name}`, createdAt: serverTimestamp(),
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
+    action: "photo_restored",
+    title: "Foto restaurada",
+    detail: `${file.name} · ${file.folderName} · ${actor.name}`,
+    createdAt: serverTimestamp(),
   });
   await batch.commit();
 }
@@ -263,42 +494,86 @@ export async function synchronizeWorkspace(
   actor: WorkspaceActor,
   folders: FolderRecord[],
   files: FileRecord[],
-  snapshot: { folders: Array<{ id: string; name: string }>; files: Array<{ id: string; name: string; size: number; webUrl: string; folderName: string }> },
+  snapshot: {
+    folders: Array<{ id: string; name: string }>;
+    files: Array<{
+      id: string;
+      name: string;
+      size: number;
+      webUrl: string;
+      folderName: string;
+    }>;
+  },
 ) {
-  const remoteFoldersById = new Map(snapshot.folders.map((item) => [item.id, item]));
-  const remoteFoldersByName = new Map(snapshot.folders.map((item) => [item.name.toLocaleLowerCase(), item]));
+  const remoteFoldersById = new Map(
+    snapshot.folders.map((item) => [item.id, item]),
+  );
+  const remoteFoldersByName = new Map(
+    snapshot.folders.map((item) => [item.name.toLocaleLowerCase(), item]),
+  );
   const remoteFiles = new Map(snapshot.files.map((item) => [item.id, item]));
-  const missingFiles = files.filter((item) => item.oneDriveItemId && !remoteFiles.has(item.oneDriveItemId));
+  const missingFiles = files.filter(
+    (item) => item.oneDriveItemId && !remoteFiles.has(item.oneDriveItemId),
+  );
   const missingFolders = folders.filter((item) => {
     if (item.oneDriveItemId) return !remoteFoldersById.has(item.oneDriveItemId);
-    return files.some((file) => file.folderId === item.id) && !remoteFoldersByName.has(item.name.toLocaleLowerCase());
+    return (
+      files.some((file) => file.folderId === item.id) &&
+      !remoteFoldersByName.has(item.name.toLocaleLowerCase())
+    );
   });
   const batch = writeBatch(db);
   let updated = 0;
   files.forEach((item) => {
-    const remote = item.oneDriveItemId ? remoteFiles.get(item.oneDriveItemId) : undefined;
+    const remote = item.oneDriveItemId
+      ? remoteFiles.get(item.oneDriveItemId)
+      : undefined;
     if (!remote) return;
-    const folder = folders.find((candidate) => candidate.name.toLocaleLowerCase() === remote.folderName.toLocaleLowerCase());
+    const folder = folders.find(
+      (candidate) =>
+        candidate.name.toLocaleLowerCase() ===
+        remote.folderName.toLocaleLowerCase(),
+    );
     const changes: Record<string, unknown> = {};
     if (item.name !== remote.name) changes.name = remote.name;
     if (item.size !== remote.size) changes.size = remote.size;
-    if (item.oneDriveWebUrl !== remote.webUrl) changes.oneDriveWebUrl = remote.webUrl;
-    if (folder && item.folderId !== folder.id) { changes.folderId = folder.id; changes.folderName = folder.name; }
-    if (Object.keys(changes).length) { batch.update(doc(db, "files", item.id), changes); updated += 1; }
+    if (item.oneDriveWebUrl !== remote.webUrl)
+      changes.oneDriveWebUrl = remote.webUrl;
+    if (folder && item.folderId !== folder.id) {
+      changes.folderId = folder.id;
+      changes.folderName = folder.name;
+    }
+    if (Object.keys(changes).length) {
+      batch.update(doc(db, "files", item.id), changes);
+      updated += 1;
+    }
   });
   folders.forEach((item) => {
     if (item.oneDriveItemId) return;
     const remote = remoteFoldersByName.get(item.name.toLocaleLowerCase());
-    if (remote) { batch.update(doc(db, "folders", item.id), { oneDriveItemId: remote.id, updatedAt: serverTimestamp() }); updated += 1; }
+    if (remote) {
+      batch.update(doc(db, "folders", item.id), {
+        oneDriveItemId: remote.id,
+        updatedAt: serverTimestamp(),
+      });
+      updated += 1;
+    }
   });
   missingFiles.forEach((item) => batch.delete(doc(db, "files", item.id)));
   missingFolders.forEach((item) => batch.delete(doc(db, "folders", item.id)));
   batch.set(doc(collection(db, "history")), {
-    companyId: actor.companyId, userId: actor.userId, actorName: actor.name, action: "workspace_synced",
+    companyId: actor.companyId,
+    userId: actor.userId,
+    actorName: actor.name,
+    action: "workspace_synced",
     title: "OneDrive sincronizado",
     detail: `${missingFolders.length} pasta(s) e ${missingFiles.length} arquivo(s) removido(s); ${updated} registro(s) atualizado(s) · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
-  return { removedFolders: missingFolders.length, removedFiles: missingFiles.length, updated };
+  return {
+    removedFolders: missingFolders.length,
+    removedFiles: missingFiles.length,
+    updated,
+  };
 }

@@ -44,10 +44,12 @@ import {
   getOneDriveAccount,
   getOneDriveStorage,
   isOneDriveConfigured,
+  moveOneDriveFolderToTrash,
   moveOneDriveItem,
   oneDriveErrorMessage,
   readOneDriveSnapshot,
   renameOneDriveItem,
+  restoreOneDriveFolder,
   uploadPhotoToOneDrive,
   type OneDriveStorage,
 } from "./onedrive";
@@ -57,14 +59,17 @@ import {
   migrateLegacyWorkspace,
   moveFileRecord,
   permanentlyDeleteFileRecord,
+  permanentlyDeleteFolderRecord,
   registerPhoto,
   removeFileRecord,
   removeFolder,
   renameFileRecord,
   renameFolder,
+  restoreFolder,
   restoreFileRecord,
   synchronizeWorkspace,
   watchDeletedFiles,
+  watchDeletedFolders,
   watchFiles,
   watchFolders,
   watchHistory,
@@ -94,6 +99,15 @@ type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
+type AppNotification = {
+  id: string;
+  title: string;
+  detail: string;
+  kind: "info" | "warning" | "danger" | "success";
+  createdAt: number;
+  read: boolean;
+};
+type StorageSample = { used: number; total: number; createdAt: number };
 const nav = [
   { id: "dashboard" as Screen, label: "Início", icon: "home" },
   { id: "capture" as Screen, label: "Tirar foto", icon: "camera" },
@@ -390,6 +404,7 @@ function DashboardApp({
   const [screen, setScreen] = useState<Screen>("dashboard"),
     [collapsed, setCollapsed] = useState(true);
   const [folders, setFolders] = useState<FolderRecord[]>([]),
+    [deletedFolders, setDeletedFolders] = useState<FolderRecord[]>([]),
     [files, setFiles] = useState<FileRecord[]>([]),
     [deletedFiles, setDeletedFiles] = useState<FileRecord[]>([]),
     [history, setHistory] = useState<HistoryRecord[]>([]);
@@ -408,6 +423,16 @@ function DashboardApp({
       null,
     ),
     [oneDriveStorageLoading, setOneDriveStorageLoading] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() =>
+      readLocalList<AppNotification>(
+        `molde-cloud:notifications:${profile.companyId}`,
+      ),
+    ),
+    [notificationOpen, setNotificationOpen] = useState(false),
+    [updateAvailable, setUpdateAvailable] = useState(false);
+  const [storageSamples, setStorageSamples] = useState<StorageSample[]>(() =>
+    readLocalList<StorageSample>(`molde-cloud:storage:${profile.companyId}`),
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine),
@@ -429,6 +454,7 @@ function DashboardApp({
     [selectedFiles, setSelectedFiles] = useState<Set<string>>(() => new Set());
   const [sentPhotosOpen, setSentPhotosOpen] = useState(false),
     [trashOpen, setTrashOpen] = useState(false),
+    [folderTrashOpen, setFolderTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [mobileActions, setMobileActions] = useState<
     | { type: "folder"; item: FolderRecord }
@@ -460,8 +486,33 @@ function DashboardApp({
     }),
     [user.uid, user.displayName, profile.companyId, profile.name],
   );
+  function addNotification(
+    title: string,
+    detail: string,
+    kind: AppNotification["kind"] = "info",
+    stableId?: string,
+  ) {
+    setNotifications((current) => {
+      const id = stableId || `${Date.now()}-${Math.random()}`;
+      if (current.some((item) => item.id === id)) return current;
+      const next = [
+        { id, title, detail, kind, createdAt: Date.now(), read: false },
+        ...current,
+      ].slice(0, 30);
+      localStorage.setItem(
+        `molde-cloud:notifications:${profile.companyId}`,
+        JSON.stringify(next),
+      );
+      return next;
+    });
+  }
   function recordError(operation: string, error: unknown) {
     void logOperationalError(workspaceActor, operation, error).catch(() => {});
+    addNotification(
+      "Operação precisa de atenção",
+      `${operationLabel(operation)} não foi concluída. Consulte o painel de erros se o problema continuar.`,
+      "danger",
+    );
   }
   const filtered = useMemo(
     () =>
@@ -499,11 +550,17 @@ function DashboardApp({
     );
     const fail = (value: string) => setMessage(value);
     const stopFolders = watchFolders(profile.companyId, setFolders, fail),
+      stopDeletedFolders = watchDeletedFolders(
+        profile.companyId,
+        setDeletedFolders,
+        fail,
+      ),
       stopFiles = watchFiles(profile.companyId, setFiles, fail),
       stopDeleted = watchDeletedFiles(profile.companyId, setDeletedFiles, fail),
       stopHistory = watchHistory(profile.companyId, setHistory, fail);
     return () => {
       stopFolders();
+      stopDeletedFolders();
       stopFiles();
       stopDeleted();
       stopHistory();
@@ -554,6 +611,9 @@ function DashboardApp({
     };
   }, [profile.companyId, profile.role]);
   useEffect(() => {
+    if (oneDriveAccount) void loadOneDriveStorage();
+  }, [oneDriveAccount]);
+  useEffect(() => {
     if (!message || busy) return;
     const timer = window.setTimeout(() => setMessage(""), 5000);
     return () => window.clearTimeout(timer);
@@ -585,6 +645,20 @@ function DashboardApp({
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [profileOpen]);
+  useEffect(() => {
+    const ready = () => {
+      setUpdateAvailable(true);
+      addNotification(
+        "Nova versão disponível",
+        "Atualize o Molde Cloud para usar as melhorias mais recentes.",
+        "info",
+        "pwa-update-ready",
+      );
+    };
+    if (sessionStorage.getItem("molde-cloud:update-ready") === "yes") ready();
+    window.addEventListener("molde-cloud:update-ready", ready);
+    return () => window.removeEventListener("molde-cloud:update-ready", ready);
+  }, []);
   useEffect(() => {
     if (historyInitialized.current) return;
     historyInitialized.current = true;
@@ -619,6 +693,11 @@ function DashboardApp({
         restoreCurrentEntry();
         return;
       }
+      if (notificationOpen) {
+        setNotificationOpen(false);
+        restoreCurrentEntry();
+        return;
+      }
       if (oneDriveMenuOpen) {
         setOneDriveMenuOpen(false);
         restoreCurrentEntry();
@@ -647,6 +726,7 @@ function DashboardApp({
   }, [
     collapsed,
     mobileActions,
+    notificationOpen,
     oneDriveMenuOpen,
     previewFile,
     profileOpen,
@@ -777,27 +857,57 @@ function DashboardApp({
   }
   async function deleteFolder(folder: FolderRecord) {
     const count = files.filter((item) => item.folderId === folder.id).length;
-    if (count) {
-      setMessage("Mova ou exclua as fotos desta pasta antes de excluí-la.");
-      return;
-    }
     const confirmed = await dialog.confirm({
-      title: "Excluir pasta?",
-      message: `A pasta “${folder.name}” será removida do sistema e enviada para a lixeira do OneDrive.`,
-      confirmText: "Excluir pasta",
+      title: "Mover pasta para a lixeira?",
+      message: `A pasta “${folder.name}”${count ? ` e suas ${count} foto(s)` : ""} poderá ser restaurada depois.`,
+      confirmText: "Mover para lixeira",
       danger: true,
     });
     if (!confirmed) return;
     setBusy(true);
     try {
       if (folder.oneDriveItemId)
-        await deleteOneDriveItem(folder.oneDriveItemId);
+        await moveOneDriveFolderToTrash(folder.oneDriveItemId);
       await removeFolder(workspaceActor, folder);
-      setMessage(
-        "Pasta excluída. O OneDrive a mantém na lixeira para recuperação.",
-      );
+      setMessage("Pasta movida para a lixeira e disponível para restauração.");
     } catch (error) {
       recordError("delete_folder", error);
+      setMessage(oneDriveErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function restoreDeletedFolder(folder: FolderRecord) {
+    setBusy(true);
+    try {
+      if (folder.oneDriveItemId)
+        await restoreOneDriveFolder(folder.oneDriveItemId);
+      await restoreFolder(workspaceActor, folder);
+      setMessage("Pasta e fotografias restauradas com sucesso.");
+    } catch (error) {
+      recordError("restore_folder", error);
+      setMessage(oneDriveErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function permanentlyDeleteFolder(folder: FolderRecord) {
+    const confirmation = await dialog.prompt({
+      title: "Excluir pasta definitivamente?",
+      message: `Esta ação apagará “${folder.name}” e seus arquivos. Digite EXCLUIR para confirmar.`,
+      placeholder: "EXCLUIR",
+      confirmText: "Excluir definitivamente",
+      danger: true,
+    });
+    if (confirmation !== "EXCLUIR") return;
+    setBusy(true);
+    try {
+      if (folder.oneDriveItemId)
+        await deleteOneDriveItem(folder.oneDriveItemId);
+      await permanentlyDeleteFolderRecord(workspaceActor, folder);
+      setMessage("Pasta excluída definitivamente.");
+    } catch (error) {
+      recordError("permanent_delete_folder", error);
       setMessage(oneDriveErrorMessage(error));
     } finally {
       setBusy(false);
@@ -1061,7 +1171,44 @@ function DashboardApp({
     if (!oneDriveAccount || oneDriveStorageLoading) return;
     setOneDriveStorageLoading(true);
     try {
-      setOneDriveStorage(await getOneDriveStorage());
+      const storage = await getOneDriveStorage();
+      setOneDriveStorage(storage);
+      const sample = {
+        used: storage.used,
+        total: storage.total,
+        createdAt: Date.now(),
+      };
+      setStorageSamples((current) => {
+        const today = new Date().toDateString();
+        const next = [
+          sample,
+          ...current.filter(
+            (item) => new Date(item.createdAt).toDateString() !== today,
+          ),
+        ].slice(0, 30);
+        localStorage.setItem(
+          `molde-cloud:storage:${profile.companyId}`,
+          JSON.stringify(next),
+        );
+        return next;
+      });
+      const percentage = storage.total
+        ? (storage.used / storage.total) * 100
+        : 0;
+      if (percentage >= 90)
+        addNotification(
+          "Armazenamento crítico",
+          `O OneDrive está com ${percentage.toFixed(0)}% do espaço ocupado.`,
+          "danger",
+          `storage-90-${new Date().toDateString()}`,
+        );
+      else if (percentage >= 80)
+        addNotification(
+          "Armazenamento em atenção",
+          `O OneDrive está com ${percentage.toFixed(0)}% do espaço ocupado.`,
+          "warning",
+          `storage-80-${new Date().toDateString()}`,
+        );
     } catch (error) {
       recordError("read_onedrive_storage", error);
       setOneDriveStorage(null);
@@ -1069,11 +1216,35 @@ function DashboardApp({
       setOneDriveStorageLoading(false);
     }
   }
+  async function applyPwaUpdate() {
+    sessionStorage.setItem("molde-cloud:pwa-reload", "pending");
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (registration?.waiting)
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    else window.location.reload();
+  }
   function toggleOneDriveMenu() {
     const next = !oneDriveMenuOpen;
     setOneDriveMenuOpen(next);
     setProfileOpen(false);
+    setNotificationOpen(false);
     if (next && oneDriveAccount) void loadOneDriveStorage();
+  }
+  function toggleNotifications() {
+    const nextOpen = !notificationOpen;
+    setNotificationOpen(nextOpen);
+    setOneDriveMenuOpen(false);
+    setProfileOpen(false);
+    if (nextOpen) {
+      setNotifications((current) => {
+        const next = current.map((item) => ({ ...item, read: true }));
+        localStorage.setItem(
+          `molde-cloud:notifications:${profile.companyId}`,
+          JSON.stringify(next),
+        );
+        return next;
+      });
+    }
   }
   async function reconnectOneDrive() {
     setOneDriveMenuOpen(false);
@@ -1249,6 +1420,17 @@ function DashboardApp({
           <div className="header-actions">
             <button
               type="button"
+              className="notification-button"
+              onClick={toggleNotifications}
+              aria-label="Abrir notificações"
+              aria-haspopup="menu"
+              aria-expanded={notificationOpen}
+            >
+              <Icon name="bell" />
+              {notifications.some((item) => !item.read) && <i />}
+            </button>
+            <button
+              type="button"
               className={`status ${oneDriveAccount ? "ok" : ""}`}
               title={oneDriveAccount || undefined}
               onClick={toggleOneDriveMenu}
@@ -1266,6 +1448,7 @@ function DashboardApp({
               className="user-chip"
               onClick={() => {
                 setOneDriveMenuOpen(false);
+                setNotificationOpen(false);
                 setProfileOpen(!profileOpen);
               }}
               title="Abrir perfil"
@@ -1283,6 +1466,57 @@ function DashboardApp({
                   "Usuário"}
               </b>
             </button>
+            {notificationOpen && (
+              <>
+                <button
+                  className="notification-backdrop"
+                  aria-label="Fechar notificações"
+                  onClick={() => setNotificationOpen(false)}
+                />
+                <section className="notification-menu" role="menu">
+                  <header>
+                    <div>
+                      <small>MOLDE CLOUD</small>
+                      <strong>Notificações</strong>
+                    </div>
+                    {notifications.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setNotifications([]);
+                          localStorage.removeItem(
+                            `molde-cloud:notifications:${profile.companyId}`,
+                          );
+                        }}
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </header>
+                  {notifications.length ? (
+                    notifications.map((item) => (
+                      <article className={item.kind} key={item.id}>
+                        <span>
+                          {item.kind === "success"
+                            ? "✓"
+                            : item.kind === "danger"
+                              ? "!"
+                              : item.kind === "warning"
+                                ? "!"
+                                : "i"}
+                        </span>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <p>{item.detail}</p>
+                          <time>{formatDate(new Date(item.createdAt))}</time>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="empty">Nenhuma notificação no momento.</div>
+                  )}
+                </section>
+              </>
+            )}
             {oneDriveMenuOpen && (
               <>
                 <button
@@ -1329,6 +1563,19 @@ function DashboardApp({
                           </small>
                         </>
                       ) : null}
+                      {storageSamples.length > 1 && (
+                        <div className="storage-history">
+                          <span>ÚLTIMAS LEITURAS</span>
+                          {storageSamples.slice(0, 3).map((sample) => (
+                            <small key={sample.createdAt}>
+                              {new Date(sample.createdAt).toLocaleDateString(
+                                "pt-BR",
+                              )}{" "}
+                              · {formatBytes(sample.used)} usados
+                            </small>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   <div className="onedrive-menu-actions">
@@ -1504,6 +1751,17 @@ function DashboardApp({
             disponível quando a conexão voltar.
           </div>
         )}
+        {updateAvailable && (
+          <div className="update-notice">
+            <div>
+              <strong>Nova versão disponível</strong>
+              <small>Atualize sem perder sua sessão ou seus dados.</small>
+            </div>
+            <button className="primary" onClick={() => void applyPwaUpdate()}>
+              <Icon name="sync" /> Atualizar agora
+            </button>
+          </div>
+        )}
         {(notice || message) && (
           <div className="system-notice">{notice || message}</div>
         )}
@@ -1672,6 +1930,55 @@ function DashboardApp({
               <div className="empty panel">
                 Crie sua primeira pasta para organizar as fotografias.
               </div>
+            )}
+            {deletedFolders.length > 0 && (
+              <>
+                <button
+                  className={`files-disclosure trash ${folderTrashOpen ? "open" : ""}`}
+                  onClick={() => setFolderTrashOpen(!folderTrashOpen)}
+                >
+                  <span>
+                    <Icon name="trash" />
+                  </span>
+                  <div>
+                    <strong>Lixeira de pastas</strong>
+                    <small>
+                      {deletedFolders.length} pasta(s) disponível(is) para
+                      restauração
+                    </small>
+                  </div>
+                  <b>⌄</b>
+                </button>
+                {folderTrashOpen && (
+                  <section className="panel trash-files folder-trash-list">
+                    {deletedFolders.map((folder) => (
+                      <article key={folder.id}>
+                        <div>
+                          <strong>{folder.name}</strong>
+                          <small>
+                            Excluída por {folder.deletedByName || "usuário"} ·{" "}
+                            {formatDate(folder.deletedAt?.toDate())}
+                          </small>
+                        </div>
+                        <button
+                          className="outline"
+                          disabled={busy}
+                          onClick={() => void restoreDeletedFolder(folder)}
+                        >
+                          <Icon name="restore" /> Restaurar pasta
+                        </button>
+                        <button
+                          className="danger-action"
+                          disabled={busy}
+                          onClick={() => void permanentlyDeleteFolder(folder)}
+                        >
+                          <Icon name="trash" /> Excluir definitivamente
+                        </button>
+                      </article>
+                    ))}
+                  </section>
+                )}
+              </>
             )}
             <button
               className={`files-disclosure ${sentPhotosOpen ? "open" : ""}`}
@@ -2602,6 +2909,14 @@ function formatBytes(value: number) {
     return `${gigabytes.toLocaleString("pt-BR", { maximumFractionDigits: gigabytes >= 100 ? 0 : 1 })} GB`;
   return `${(value / 1024 ** 2).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB`;
 }
+function readLocalList<T>(key: string): T[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(value) ? (value as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 function formatDate(value?: Date) {
   return value
     ? value.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
@@ -3327,6 +3642,12 @@ function Icon({ name }: { name: string }) {
       <>
         <path d="M12 3 2.8 20h18.4Z" />
         <path d="M12 9v4M12 17h.01" />
+      </>
+    ),
+    bell: (
+      <>
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+        <path d="M10 21h4" />
       </>
     ),
     desktop: (

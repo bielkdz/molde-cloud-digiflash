@@ -71,6 +71,11 @@ beforeAll(async () => {
         userId: "user-b",
         name: "arquivo-b.jpg",
       }),
+      setDoc(doc(db, "folders", "folder-a"), {
+        companyId: "company-a",
+        userId: "user-a",
+        name: "Pasta A",
+      }),
     ]);
   });
 });
@@ -106,6 +111,21 @@ describe("isolamento entre empresas", () => {
   it("bloqueia dados para cadastro ainda pendente", async () => {
     const db = environment.authenticatedContext("pending").firestore();
     await assertFails(getDoc(doc(db, "files", "file-a")));
+  });
+
+  it("permite mover e restaurar a própria pasta sem alterar a empresa", async () => {
+    const db = environment.authenticatedContext("user-a").firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, "folders", "folder-a"), {
+        deletedAt: serverTimestamp(),
+        deletedByName: "Usuário A",
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(db, "folders", "folder-a"), {
+        companyId: "company-b",
+      }),
+    );
   });
 });
 
