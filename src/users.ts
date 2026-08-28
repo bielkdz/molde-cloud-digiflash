@@ -18,6 +18,13 @@ export const DEFAULT_COMPANY_ID = "rosa-atelie";
 
 export type UserRole = "superadmin" | "admin" | "user" | "pending" | "blocked";
 
+export type UserPermissions = {
+  createFolder: boolean;
+  renameItems: boolean;
+  deleteItems: boolean;
+  viewTrash: boolean;
+};
+
 export type UserProfile = {
   uid: string;
   name: string;
@@ -30,6 +37,7 @@ export type UserProfile = {
   approvedBy?: string;
   createdAt?: Timestamp;
   lastLogin?: Timestamp;
+  permissions?: Partial<UserPermissions>;
 };
 
 export type EmployeeInvitation = {
@@ -137,6 +145,10 @@ export function changeUserRole(uid: string, role: UserRole, companyId: string, a
       approvedBy: approvedBy || "administrator",
     } : {}),
   });
+}
+
+export function changeUserPermissions(uid: string, permissions: UserPermissions) {
+  return updateDoc(doc(db, "users", uid), { permissions });
 }
 
 export function watchPendingApprovals(onChange: (users: UserProfile[]) => void) {

@@ -11,6 +11,24 @@ service cloud.firestore {
     function currentCompany() { return currentProfile().companyId; }
     function isSuperAdmin() { return hasProfile() && currentProfile().role == "superadmin"; }
     function isCompanyAdmin() { return hasProfile() && currentProfile().role == "admin"; }
+    function canCreateFolder() {
+      return isSuperAdmin() || isCompanyAdmin()
+        || !("permissions" in currentProfile())
+        || !("createFolder" in currentProfile().permissions)
+        || currentProfile().permissions.createFolder == true;
+    }
+    function canRenameItems() {
+      return isSuperAdmin() || isCompanyAdmin()
+        || !("permissions" in currentProfile())
+        || !("renameItems" in currentProfile().permissions)
+        || currentProfile().permissions.renameItems == true;
+    }
+    function canDeleteItems() {
+      return isSuperAdmin() || isCompanyAdmin()
+        || !("permissions" in currentProfile())
+        || !("deleteItems" in currentProfile().permissions)
+        || currentProfile().permissions.deleteItems == true;
+    }
     function companyAllowed() {
       return isSuperAdmin()
         || !exists(companyPath(currentCompany()))
@@ -104,7 +122,10 @@ service cloud.firestore {
           && request.auth.uid == uid
           && (
             (request.resource.data.role == resource.data.role
-              && request.resource.data.companyId == ("companyId" in resource.data ? resource.data.companyId : "rosa-atelie"))
+              && request.resource.data.companyId == ("companyId" in resource.data ? resource.data.companyId : "rosa-atelie")
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                "name", "email", "photoURL", "lastLogin"
+              ]))
             || (isOwner(uid)
               && request.resource.data.role == "superadmin"
               && request.resource.data.companyId == "rosa-atelie")
@@ -179,13 +200,15 @@ service cloud.firestore {
     }
 
     match /folders/{folderId} {
-      allow create: if validCompanyWrite(request.resource.data);
+      allow create: if validCompanyWrite(request.resource.data) && canCreateFolder();
       allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
       allow update: if isLegacyMigration()
         || (sameCompany(resource.data)
           && request.resource.data.companyId == currentCompany()
-          && tenantIdentityUnchanged());
-      allow delete: if sameCompany(resource.data) || legacyOwned(resource.data);
+          && tenantIdentityUnchanged()
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["name"]) || canRenameItems())
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["deletedAt", "deletedByName"]) || canDeleteItems()));
+      allow delete: if (sameCompany(resource.data) || legacyOwned(resource.data)) && canDeleteItems();
     }
 
     match /files/{fileId} {
@@ -194,8 +217,10 @@ service cloud.firestore {
       allow update: if isLegacyMigration()
         || (sameCompany(resource.data)
           && request.resource.data.companyId == currentCompany()
-          && tenantIdentityUnchanged());
-      allow delete: if sameCompany(resource.data) || legacyOwned(resource.data);
+          && tenantIdentityUnchanged()
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["name"]) || canRenameItems())
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["deletedAt", "deletedByName", "deletedWithFolderId"]) || canDeleteItems()));
+      allow delete: if (sameCompany(resource.data) || legacyOwned(resource.data)) && canDeleteItems();
     }
   }
 }

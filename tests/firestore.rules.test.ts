@@ -61,6 +61,18 @@ beforeAll(async () => {
         role: "pending",
         companyId: "company-a",
       }),
+      setDoc(doc(db, "users", "restricted"), {
+        uid: "restricted",
+        email: "restricted@example.com",
+        role: "user",
+        companyId: "company-a",
+        permissions: {
+          createFolder: false,
+          renameItems: false,
+          deleteItems: false,
+          viewTrash: false,
+        },
+      }),
       setDoc(doc(db, "files", "file-a"), {
         companyId: "company-a",
         userId: "user-a",
@@ -75,6 +87,11 @@ beforeAll(async () => {
         companyId: "company-a",
         userId: "user-a",
         name: "Pasta A",
+      }),
+      setDoc(doc(db, "folders", "folder-restricted"), {
+        companyId: "company-a",
+        userId: "restricted",
+        name: "Pasta restrita",
       }),
     ]);
   });
@@ -124,6 +141,52 @@ describe("isolamento entre empresas", () => {
     await assertFails(
       updateDoc(doc(db, "folders", "folder-a"), {
         companyId: "company-b",
+      }),
+    );
+  });
+
+  it("aplica permissões detalhadas às ações do usuário", async () => {
+    const db = environment.authenticatedContext("restricted").firestore();
+    await assertFails(
+      addDoc(collection(db, "folders"), {
+        companyId: "company-a",
+        userId: "restricted",
+        name: "Nova pasta",
+        createdAt: serverTimestamp(),
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(db, "folders", "folder-restricted"), {
+        name: "Outro nome",
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(db, "folders", "folder-restricted"), {
+        deletedAt: serverTimestamp(),
+        deletedByName: "Restrito",
+      }),
+    );
+
+    await assertFails(
+      updateDoc(doc(db, "users", "restricted"), {
+        permissions: {
+          createFolder: true,
+          renameItems: true,
+          deleteItems: true,
+          viewTrash: true,
+        },
+      }),
+    );
+
+    const adminDb = environment.authenticatedContext("admin-a").firestore();
+    await assertSucceeds(
+      updateDoc(doc(adminDb, "users", "restricted"), {
+        permissions: {
+          createFolder: true,
+          renameItems: false,
+          deleteItems: false,
+          viewTrash: false,
+        },
       }),
     );
   });

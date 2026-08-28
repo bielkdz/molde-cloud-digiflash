@@ -23,6 +23,7 @@ import {
 } from "./company";
 import {
   cancelEmployeeInvite,
+  changeUserPermissions,
   changeUserRole,
   ensureUserProfile,
   inviteEmployee,
@@ -32,6 +33,7 @@ import {
   watchUserProfile,
   type EmployeeInvitation,
   type UserProfile,
+  type UserPermissions,
   type UserRole,
 } from "./users";
 import {
@@ -458,6 +460,7 @@ function DashboardApp({
     [folderTrashOpen, setFolderTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [adminNavOpen, setAdminNavOpen] = useState(false);
+  const [healthErrors, setHealthErrors] = useState<ErrorLogRecord[]>([]);
   const [mobileActions, setMobileActions] = useState<
     | { type: "folder"; item: FolderRecord }
     | { type: "file"; item: FileRecord }
@@ -465,6 +468,15 @@ function DashboardApp({
   >(null);
   const historyInitialized = useRef(false);
   const companyStatus: CompanyStatus = currentCompany?.status || "active";
+  const managerAccess =
+    profile.role === "admin" || profile.role === "superadmin";
+  const canCreateFolder =
+      managerAccess || profile.permissions?.createFolder !== false,
+    canRenameItems =
+      managerAccess || profile.permissions?.renameItems !== false,
+    canDeleteItems =
+      managerAccess || profile.permissions?.deleteItems !== false,
+    canViewTrash = managerAccess || profile.permissions?.viewTrash !== false;
   const adminNav =
     profile.role === "superadmin"
       ? [
@@ -573,6 +585,13 @@ function DashboardApp({
     () => watchCompany(profile.companyId, setCurrentCompany),
     [profile.companyId],
   );
+  useEffect(() => {
+    if (!managerAccess) {
+      setHealthErrors([]);
+      return;
+    }
+    return watchErrorLogs(profile.companyId, setHealthErrors, () => {});
+  }, [managerAccess, profile.companyId]);
   useEffect(() => {
     let active = true;
     void getOneDriveAccount()
@@ -795,6 +814,10 @@ function DashboardApp({
     if (!fileName) setFileName(file.name.replace(/\.[^/.]+$/, ""));
   }
   async function addFolder() {
+    if (!canCreateFolder) {
+      setMessage("Seu administrador não liberou a criação de pastas.");
+      return;
+    }
     const name = newFolder.trim();
     if (!name) return;
     if (
@@ -826,6 +849,10 @@ function DashboardApp({
     }
   }
   async function editFolder(folder: FolderRecord) {
+    if (!canRenameItems) {
+      setMessage("Seu administrador não liberou a renomeação.");
+      return;
+    }
     const name = (
       await dialog.prompt({
         title: "Renomear pasta",
@@ -859,6 +886,10 @@ function DashboardApp({
     }
   }
   async function deleteFolder(folder: FolderRecord) {
+    if (!canDeleteItems) {
+      setMessage("Seu administrador não liberou exclusões.");
+      return;
+    }
     const count = files.filter((item) => item.folderId === folder.id).length;
     const confirmed = await dialog.confirm({
       title: "Mover pasta para a lixeira?",
@@ -881,6 +912,7 @@ function DashboardApp({
     }
   }
   async function restoreDeletedFolder(folder: FolderRecord) {
+    if (!canViewTrash) return;
     setBusy(true);
     try {
       if (folder.oneDriveItemId)
@@ -895,6 +927,7 @@ function DashboardApp({
     }
   }
   async function permanentlyDeleteFolder(folder: FolderRecord) {
+    if (!canViewTrash || !canDeleteItems) return;
     const confirmation = await dialog.prompt({
       title: "Excluir pasta definitivamente?",
       message: `Esta ação apagará “${folder.name}” e seus arquivos. Digite EXCLUIR para confirmar.`,
@@ -917,6 +950,10 @@ function DashboardApp({
     }
   }
   async function renameFile(file: FileRecord) {
+    if (!canRenameItems) {
+      setMessage("Seu administrador não liberou a renomeação.");
+      return;
+    }
     const name = (
       await dialog.prompt({
         title: "Renomear arquivo",
@@ -980,6 +1017,10 @@ function DashboardApp({
     }
   }
   async function deleteFile(file: FileRecord) {
+    if (!canDeleteItems) {
+      setMessage("Seu administrador não liberou exclusões.");
+      return;
+    }
     const confirmed = await dialog.confirm({
       title: "Mover para a lixeira?",
       message: `O arquivo “${file.name}” poderá ser restaurado posteriormente.`,
@@ -1001,6 +1042,7 @@ function DashboardApp({
     }
   }
   async function restoreDeletedFile(file: FileRecord) {
+    if (!canViewTrash) return;
     setBusy(true);
     try {
       const remote = file.oneDriveItemId
@@ -1016,6 +1058,7 @@ function DashboardApp({
     }
   }
   async function permanentlyDeleteFile(file: FileRecord) {
+    if (!canViewTrash || !canDeleteItems) return;
     const confirmation = await dialog.prompt({
       title: "Excluir definitivamente?",
       message: `Esta ação não poderá ser desfeita. Digite EXCLUIR para apagar “${file.name}”.`,
@@ -1096,6 +1139,10 @@ function DashboardApp({
     }
   }
   async function deleteSelectedFiles() {
+    if (!canDeleteItems) {
+      setMessage("Seu administrador não liberou exclusões.");
+      return;
+    }
     const selected = files.filter((item) => selectedFiles.has(item.id));
     if (!selected.length) return;
     const confirmation = await dialog.prompt({
@@ -1801,6 +1848,14 @@ function DashboardApp({
             files={files}
             folders={folders}
             oneDriveConnected={Boolean(oneDriveAccount)}
+            oneDriveStorage={oneDriveStorage}
+            lastSynchronization={lastSynchronization}
+            pendingErrors={
+              managerAccess
+                ? healthErrors.filter((item) => item.status !== "resolved")
+                    .length
+                : null
+            }
             go={navigateTo}
             openFile={setPreviewFile}
           />
@@ -1814,6 +1869,7 @@ function DashboardApp({
             busy={busy}
             uploadProgress={uploadProgress}
             oneDriveConnected={Boolean(oneDriveAccount)}
+            canCreateFolder={canCreateFolder}
             setFolderId={setFolderId}
             setFileName={setFileName}
             inputRef={inputRef}
@@ -1854,9 +1910,14 @@ function DashboardApp({
                 >
                   <Icon name="camera" /> Nova foto
                 </button>
-                <button className="outline" onClick={() => setShowFolder(true)}>
-                  <Icon name="plus" /> Nova pasta
-                </button>
+                {canCreateFolder && (
+                  <button
+                    className="outline"
+                    onClick={() => setShowFolder(true)}
+                  >
+                    <Icon name="plus" /> Nova pasta
+                  </button>
+                )}
                 <button
                   className="sync-button"
                   disabled={busy || !online || !oneDriveAccount}
@@ -1904,23 +1965,27 @@ function DashboardApp({
                       </small>
                     </div>
                     <div className="folder-actions">
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void editFolder(folder);
-                        }}
-                      >
-                        <Icon name="edit" /> Editar
-                      </button>
-                      <button
-                        className="danger"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void deleteFolder(folder);
-                        }}
-                      >
-                        <Icon name="trash" /> Excluir
-                      </button>
+                      {canRenameItems && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void editFolder(folder);
+                          }}
+                        >
+                          <Icon name="edit" /> Editar
+                        </button>
+                      )}
+                      {canDeleteItems && (
+                        <button
+                          className="danger"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void deleteFolder(folder);
+                          }}
+                        >
+                          <Icon name="trash" /> Excluir
+                        </button>
+                      )}
                     </div>
                     <button
                       className="mobile-more-button"
@@ -1963,12 +2028,16 @@ function DashboardApp({
                   icon="folder"
                   title="Nenhuma pasta criada"
                   detail="Crie uma pasta para organizar as fotografias antes do primeiro envio."
-                  actionLabel="Criar primeira pasta"
-                  onAction={() => setShowFolder(true)}
+                  actionLabel={
+                    canCreateFolder ? "Criar primeira pasta" : undefined
+                  }
+                  onAction={
+                    canCreateFolder ? () => setShowFolder(true) : undefined
+                  }
                 />
               </section>
             )}
-            {deletedFolders.length > 0 && (
+            {canViewTrash && deletedFolders.length > 0 && (
               <>
                 <button
                   className={`files-disclosure trash ${folderTrashOpen ? "open" : ""}`}
@@ -1997,20 +2066,24 @@ function DashboardApp({
                             {formatDate(folder.deletedAt?.toDate())}
                           </small>
                         </div>
-                        <button
-                          className="outline"
-                          disabled={busy}
-                          onClick={() => void restoreDeletedFolder(folder)}
-                        >
-                          <Icon name="restore" /> Restaurar pasta
-                        </button>
-                        <button
-                          className="danger-action"
-                          disabled={busy}
-                          onClick={() => void permanentlyDeleteFolder(folder)}
-                        >
-                          <Icon name="trash" /> Excluir definitivamente
-                        </button>
+                        {canDeleteItems && (
+                          <button
+                            className="outline"
+                            disabled={busy}
+                            onClick={() => void restoreDeletedFolder(folder)}
+                          >
+                            <Icon name="restore" /> Restaurar pasta
+                          </button>
+                        )}
+                        {canDeleteItems && (
+                          <button
+                            className="danger-action"
+                            disabled={busy}
+                            onClick={() => void permanentlyDeleteFolder(folder)}
+                          >
+                            <Icon name="trash" /> Excluir definitivamente
+                          </button>
+                        )}
                       </article>
                     ))}
                   </section>
@@ -2086,13 +2159,15 @@ function DashboardApp({
                         >
                           Mover selecionadas
                         </button>
-                        <button
-                          className="danger-action"
-                          disabled={busy}
-                          onClick={() => void deleteSelectedFiles()}
-                        >
-                          Excluir selecionadas
-                        </button>
+                        {canDeleteItems && (
+                          <button
+                            className="danger-action"
+                            disabled={busy}
+                            onClick={() => void deleteSelectedFiles()}
+                          >
+                            Excluir selecionadas
+                          </button>
+                        )}
                         <button
                           className="clear-selection"
                           onClick={() => setSelectedFiles(new Set())}
@@ -2119,9 +2194,13 @@ function DashboardApp({
                         onSelect={() => toggleFileSelection(item.id)}
                         onOpen={() => setPreviewFile(item)}
                         actions={{
-                          rename: () => void renameFile(item),
+                          ...(canRenameItems
+                            ? { rename: () => void renameFile(item) }
+                            : {}),
                           move: () => void moveFile(item),
-                          remove: () => void deleteFile(item),
+                          ...(canDeleteItems
+                            ? { remove: () => void deleteFile(item) }
+                            : {}),
                         }}
                         onMenu={() => setMobileActions({ type: "file", item })}
                       />
@@ -2136,7 +2215,7 @@ function DashboardApp({
                 </section>
               </>
             )}
-            {deletedFiles.length > 0 && (
+            {canViewTrash && deletedFiles.length > 0 && (
               <>
                 <button
                   className={`files-disclosure trash ${trashOpen ? "open" : ""}`}
@@ -2162,20 +2241,24 @@ function DashboardApp({
                             {item.deletedByName || "usuário"}
                           </small>
                         </div>
-                        <button
-                          className="outline"
-                          disabled={busy}
-                          onClick={() => void restoreDeletedFile(item)}
-                        >
-                          <Icon name="restore" /> Restaurar
-                        </button>
-                        <button
-                          className="danger-action"
-                          disabled={busy}
-                          onClick={() => void permanentlyDeleteFile(item)}
-                        >
-                          <Icon name="trash" /> Excluir definitivamente
-                        </button>
+                        {canDeleteItems && (
+                          <button
+                            className="outline"
+                            disabled={busy}
+                            onClick={() => void restoreDeletedFile(item)}
+                          >
+                            <Icon name="restore" /> Restaurar
+                          </button>
+                        )}
+                        {canDeleteItems && (
+                          <button
+                            className="danger-action"
+                            disabled={busy}
+                            onClick={() => void permanentlyDeleteFile(item)}
+                          >
+                            <Icon name="trash" /> Excluir definitivamente
+                          </button>
+                        )}
                       </article>
                     ))}
                   </section>
@@ -2353,22 +2436,26 @@ function DashboardApp({
               </div>
             </div>
             <footer>
-              <button onClick={() => void renameFile(previewFile)}>
-                <Icon name="edit" /> Renomear
-              </button>
+              {canRenameItems && (
+                <button onClick={() => void renameFile(previewFile)}>
+                  <Icon name="edit" /> Renomear
+                </button>
+              )}
               <button onClick={() => void moveFile(previewFile)}>
                 <Icon name="move" /> Mover
               </button>
-              <button
-                className="danger"
-                onClick={() => {
-                  const file = previewFile;
-                  setPreviewFile(null);
-                  void deleteFile(file);
-                }}
-              >
-                <Icon name="trash" /> Excluir
-              </button>
+              {canDeleteItems && (
+                <button
+                  className="danger"
+                  onClick={() => {
+                    const file = previewFile;
+                    setPreviewFile(null);
+                    void deleteFile(file);
+                  }}
+                >
+                  <Icon name="trash" /> Excluir
+                </button>
+              )}
             </footer>
           </section>
         </div>
@@ -2402,25 +2489,29 @@ function DashboardApp({
                 >
                   <Icon name="folder" /> Abrir pasta
                 </button>
-                <button
-                  onClick={() => {
-                    const folder = mobileActions.item;
-                    setMobileActions(null);
-                    void editFolder(folder);
-                  }}
-                >
-                  <Icon name="edit" /> Renomear
-                </button>
-                <button
-                  className="danger"
-                  onClick={() => {
-                    const folder = mobileActions.item;
-                    setMobileActions(null);
-                    void deleteFolder(folder);
-                  }}
-                >
-                  <Icon name="trash" /> Excluir
-                </button>
+                {canRenameItems && (
+                  <button
+                    onClick={() => {
+                      const folder = mobileActions.item;
+                      setMobileActions(null);
+                      void editFolder(folder);
+                    }}
+                  >
+                    <Icon name="edit" /> Renomear
+                  </button>
+                )}
+                {canDeleteItems && (
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      const folder = mobileActions.item;
+                      setMobileActions(null);
+                      void deleteFolder(folder);
+                    }}
+                  >
+                    <Icon name="trash" /> Excluir
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -2432,15 +2523,17 @@ function DashboardApp({
                 >
                   <Icon name="eye" /> Visualizar
                 </button>
-                <button
-                  onClick={() => {
-                    const file = mobileActions.item;
-                    setMobileActions(null);
-                    void renameFile(file);
-                  }}
-                >
-                  <Icon name="edit" /> Renomear
-                </button>
+                {canRenameItems && (
+                  <button
+                    onClick={() => {
+                      const file = mobileActions.item;
+                      setMobileActions(null);
+                      void renameFile(file);
+                    }}
+                  >
+                    <Icon name="edit" /> Renomear
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     const file = mobileActions.item;
@@ -2450,16 +2543,18 @@ function DashboardApp({
                 >
                   <Icon name="move" /> Mover
                 </button>
-                <button
-                  className="danger"
-                  onClick={() => {
-                    const file = mobileActions.item;
-                    setMobileActions(null);
-                    void deleteFile(file);
-                  }}
-                >
-                  <Icon name="trash" /> Excluir
-                </button>
+                {canDeleteItems && (
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      const file = mobileActions.item;
+                      setMobileActions(null);
+                      void deleteFile(file);
+                    }}
+                  >
+                    <Icon name="trash" /> Excluir
+                  </button>
+                )}
               </>
             )}
             <button
@@ -2512,12 +2607,18 @@ function Dashboard({
   files,
   folders,
   oneDriveConnected,
+  oneDriveStorage,
+  lastSynchronization,
+  pendingErrors,
   go,
   openFile,
 }: {
   files: FileRecord[];
   folders: FolderRecord[];
   oneDriveConnected: boolean;
+  oneDriveStorage: OneDriveStorage | null;
+  lastSynchronization?: HistoryRecord;
+  pendingErrors: number | null;
   go: (s: Screen) => void;
   openFile: (file: FileRecord) => void;
 }) {
@@ -2583,6 +2684,12 @@ function Dashboard({
           }
         />
       </div>
+      <SystemHealth
+        oneDriveConnected={oneDriveConnected}
+        storage={oneDriveStorage}
+        lastSynchronization={lastSynchronization}
+        pendingErrors={pendingErrors}
+      />
       <div className="lower-grid">
         <section className="panel">
           <div className="panel-title">
@@ -2630,6 +2737,99 @@ function Dashboard({
     </div>
   );
 }
+function SystemHealth({
+  oneDriveConnected,
+  storage,
+  lastSynchronization,
+  pendingErrors,
+}: {
+  oneDriveConnected: boolean;
+  storage: OneDriveStorage | null;
+  lastSynchronization?: HistoryRecord;
+  pendingErrors: number | null;
+}) {
+  const storagePercent = storage?.total
+    ? Math.round((storage.used / storage.total) * 100)
+    : null;
+  return (
+    <section className="system-health panel">
+      <div className="system-health-title">
+        <div>
+          <small>MONITORAMENTO</small>
+          <h3>Saúde do sistema</h3>
+        </div>
+        <span className={oneDriveConnected ? "healthy" : "warning"}>
+          {oneDriveConnected ? "Tudo pronto" : "Requer atenção"}
+        </span>
+      </div>
+      <div className="health-grid">
+        <HealthItem
+          icon="cloud"
+          label="OneDrive"
+          value={oneDriveConnected ? "Conectado" : "Desconectado"}
+          tone={oneDriveConnected ? "healthy" : "warning"}
+        />
+        <HealthItem
+          icon="sync"
+          label="Última sincronização"
+          value={
+            lastSynchronization
+              ? formatDate(lastSynchronization.createdAt?.toDate())
+              : "Ainda não realizada"
+          }
+          tone={lastSynchronization ? "healthy" : "neutral"}
+        />
+        <HealthItem
+          icon="chart"
+          label="Armazenamento"
+          value={
+            storagePercent === null
+              ? "Aguardando consulta"
+              : `${storagePercent}% usado`
+          }
+          tone={
+            storagePercent !== null && storagePercent >= 90
+              ? "warning"
+              : "healthy"
+          }
+        />
+        <HealthItem
+          icon="alert"
+          label="Erros pendentes"
+          value={
+            pendingErrors === null
+              ? "Visível ao administrador"
+              : String(pendingErrors)
+          }
+          tone={pendingErrors && pendingErrors > 0 ? "warning" : "healthy"}
+        />
+      </div>
+    </section>
+  );
+}
+function HealthItem({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  tone: string;
+}) {
+  return (
+    <article className={tone}>
+      <span>
+        <Icon name={icon} />
+      </span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}
 function Stat({
   icon,
   tone,
@@ -2666,6 +2866,7 @@ type CaptureProps = {
   busy: boolean;
   uploadProgress: number | null;
   oneDriveConnected: boolean;
+  canCreateFolder: boolean;
   setFolderId: (value: string) => void;
   setFileName: (value: string) => void;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -2765,9 +2966,11 @@ function Capture(p: CaptureProps) {
                 ))}
               </select>
             </label>
-            <button className="outline" onClick={p.openFolder}>
-              ＋ Criar pasta
-            </button>
+            {p.canCreateFolder && (
+              <button className="outline" onClick={p.openFolder}>
+                ＋ Criar pasta
+              </button>
+            )}
             <label>
               Nome do arquivo
               <input
@@ -2913,7 +3116,7 @@ function FileRow({
   selected?: boolean;
   onSelect?: () => void;
   onOpen?: () => void;
-  actions?: { rename: () => void; move: () => void; remove: () => void };
+  actions?: { rename?: () => void; move?: () => void; remove?: () => void };
   onMenu?: () => void;
 }) {
   return (
@@ -2956,17 +3159,23 @@ function FileRow({
           <Icon name="eye" /> Visualizar
         </button>
       )}
-      {actions && (
+      {actions && (actions.rename || actions.move || actions.remove) && (
         <div className="file-actions">
-          <button onClick={actions.rename}>
-            <Icon name="edit" /> Renomear
-          </button>
-          <button onClick={actions.move}>
-            <Icon name="move" /> Mover
-          </button>
-          <button className="danger" onClick={actions.remove}>
-            <Icon name="trash" /> Excluir
-          </button>
+          {actions.rename && (
+            <button onClick={actions.rename}>
+              <Icon name="edit" /> Renomear
+            </button>
+          )}
+          {actions.move && (
+            <button onClick={actions.move}>
+              <Icon name="move" /> Mover
+            </button>
+          )}
+          {actions.remove && (
+            <button className="danger" onClick={actions.remove}>
+              <Icon name="trash" /> Excluir
+            </button>
+          )}
         </div>
       )}
       {onMenu && (
@@ -3418,7 +3627,14 @@ function UsersAdmin({
     [invitations, setInvitations] = useState<EmployeeInvitation[]>([]),
     [email, setEmail] = useState(""),
     [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [permissionUserId, setPermissionUserId] = useState<string | null>(null);
+  const defaultPermissions: UserPermissions = {
+    createFolder: true,
+    renameItems: true,
+    deleteItems: true,
+    viewTrash: true,
+  };
   useEffect(() => {
     const stopUsers = watchAllUsers(companyId, setUsers),
       stopInvites = watchEmployeeInvites(companyId, setInvitations);
@@ -3470,6 +3686,26 @@ function UsersAdmin({
       setMessage("Permissão atualizada com sucesso.");
     } catch {
       setMessage("Não foi possível atualizar esta permissão.");
+    }
+  }
+  async function setDetailedPermission(
+    item: UserProfile,
+    key: keyof UserPermissions,
+    allowed: boolean,
+  ) {
+    setMessage("");
+    setBusy(true);
+    try {
+      await changeUserPermissions(item.uid, {
+        ...defaultPermissions,
+        ...item.permissions,
+        [key]: allowed,
+      });
+      setMessage("Ações permitidas atualizadas.");
+    } catch {
+      setMessage("Não foi possível atualizar as ações deste usuário.");
+    } finally {
+      setBusy(false);
     }
   }
   async function removeUser(item: UserProfile) {
@@ -3597,6 +3833,49 @@ function UsersAdmin({
               >
                 Remover acesso
               </button>
+            )}
+            {item.role === "user" && (
+              <>
+                <button
+                  className="permission-toggle"
+                  aria-expanded={permissionUserId === item.uid}
+                  onClick={() =>
+                    setPermissionUserId((current) =>
+                      current === item.uid ? null : item.uid,
+                    )
+                  }
+                >
+                  Ajustar ações {permissionUserId === item.uid ? "⌃" : "⌄"}
+                </button>
+                {permissionUserId === item.uid && (
+                  <div className="user-permission-grid">
+                    {(
+                      [
+                        ["createFolder", "Criar pastas"],
+                        ["renameItems", "Renomear itens"],
+                        ["deleteItems", "Excluir itens"],
+                        ["viewTrash", "Ver lixeira"],
+                      ] as [keyof UserPermissions, string][]
+                    ).map(([key, label]) => (
+                      <label key={key}>
+                        <input
+                          type="checkbox"
+                          disabled={busy}
+                          checked={item.permissions?.[key] !== false}
+                          onChange={(event) =>
+                            void setDetailedPermission(
+                              item,
+                              key,
+                              event.target.checked,
+                            )
+                          }
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </article>
         ))}

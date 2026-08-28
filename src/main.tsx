@@ -4,6 +4,7 @@ import App from "./App";
 import { DialogProvider } from "./DialogProvider";
 import "./index.css";
 import "./auth-users.css";
+import "./health-permissions.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DialogProvider>
