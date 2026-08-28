@@ -92,6 +92,7 @@ type Screen =
   | "files"
   | "history"
   | "search"
+  | "report"
   | "errors"
   | "users"
   | "companies";
@@ -456,6 +457,7 @@ function DashboardApp({
     [trashOpen, setTrashOpen] = useState(false),
     [folderTrashOpen, setFolderTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const [adminNavOpen, setAdminNavOpen] = useState(false);
   const [mobileActions, setMobileActions] = useState<
     | { type: "folder"; item: FolderRecord }
     | { type: "file"; item: FileRecord }
@@ -463,21 +465,22 @@ function DashboardApp({
   >(null);
   const historyInitialized = useRef(false);
   const companyStatus: CompanyStatus = currentCompany?.status || "active";
-  const visibleNav =
+  const adminNav =
     profile.role === "superadmin"
       ? [
-          ...nav,
+          { id: "report" as Screen, label: "Relatório", icon: "chart" },
           { id: "errors" as Screen, label: "Erros", icon: "alert" },
           { id: "users" as Screen, label: "Usuários", icon: "users" },
           { id: "companies" as Screen, label: "Empresas", icon: "building" },
         ]
       : profile.role === "admin"
         ? [
-            ...nav,
+            { id: "report" as Screen, label: "Relatório", icon: "chart" },
             { id: "errors" as Screen, label: "Erros", icon: "alert" },
             { id: "users" as Screen, label: "Usuários", icon: "users" },
           ]
-        : nav;
+        : [];
+  const visibleNav = [...nav, ...adminNav];
   const workspaceActor = useMemo(
     () => ({
       userId: user.uid,
@@ -1373,7 +1376,7 @@ function DashboardApp({
           ‹
         </button>
         <nav>
-          {visibleNav.map((x) => (
+          {nav.map((x) => (
             <button
               key={x.id}
               className={screen === x.id ? "active" : ""}
@@ -1385,6 +1388,34 @@ function DashboardApp({
               <span className="nav-label">{x.label}</span>
             </button>
           ))}
+          {adminNav.length > 0 && (
+            <div className={`admin-nav-group ${adminNavOpen ? "open" : ""}`}>
+              <button
+                className="admin-nav-toggle"
+                onClick={() => setAdminNavOpen(!adminNavOpen)}
+                aria-expanded={adminNavOpen}
+              >
+                <span className="nav-icon">
+                  <Icon name="shield" />
+                </span>
+                <span className="nav-label">Administração</span>
+                <b>⌄</b>
+              </button>
+              {adminNavOpen &&
+                adminNav.map((x) => (
+                  <button
+                    key={x.id}
+                    className={`admin-nav-item ${screen === x.id ? "active" : ""}`}
+                    onClick={() => navigateTo(x.id)}
+                  >
+                    <span className="nav-icon">
+                      <Icon name={x.icon} />
+                    </span>
+                    <span className="nav-label">{x.label}</span>
+                  </button>
+                ))}
+            </div>
+          )}
         </nav>
         {installPrompt && (
           <button className="install-button" onClick={() => void installApp()}>
@@ -1818,21 +1849,21 @@ function DashboardApp({
               </div>
               <div className="heading-actions">
                 <button
+                  className="primary"
+                  onClick={() => navigateTo("capture")}
+                >
+                  <Icon name="camera" /> Nova foto
+                </button>
+                <button className="outline" onClick={() => setShowFolder(true)}>
+                  <Icon name="plus" /> Nova pasta
+                </button>
+                <button
                   className="sync-button"
                   disabled={busy || !online || !oneDriveAccount}
                   onClick={() => void syncOneDrive()}
                 >
                   <Icon name="sync" />
                   {busy ? "Sincronizando..." : "Sincronizar"}
-                </button>
-                <button className="outline" onClick={() => setShowFolder(true)}>
-                  <Icon name="plus" /> Nova pasta
-                </button>
-                <button
-                  className="primary"
-                  onClick={() => navigateTo("capture")}
-                >
-                  <Icon name="plus" /> Nova foto
                 </button>
               </div>
             </div>
@@ -1927,9 +1958,15 @@ function DashboardApp({
                 ))}
               </div>
             ) : (
-              <div className="empty panel">
-                Crie sua primeira pasta para organizar as fotografias.
-              </div>
+              <section className="panel">
+                <EmptyState
+                  icon="folder"
+                  title="Nenhuma pasta criada"
+                  detail="Crie uma pasta para organizar as fotografias antes do primeiro envio."
+                  actionLabel="Criar primeira pasta"
+                  onAction={() => setShowFolder(true)}
+                />
+              </section>
             )}
             {deletedFolders.length > 0 && (
               <>
@@ -2090,9 +2127,11 @@ function DashboardApp({
                       />
                     ))
                   ) : (
-                    <div className="empty">
-                      Nenhuma foto corresponde ao filtro escolhido.
-                    </div>
+                    <EmptyState
+                      icon="image"
+                      title="Nenhuma foto encontrada"
+                      detail="Altere o filtro escolhido ou envie uma nova fotografia."
+                    />
                   )}
                 </section>
               </>
@@ -2170,7 +2209,11 @@ function DashboardApp({
                   />
                 ))
               ) : (
-                <div className="empty">Nenhum arquivo encontrado.</div>
+                <EmptyState
+                  icon="search"
+                  title="Nenhum arquivo encontrado"
+                  detail="Tente outro nome de pasta ou fotografia."
+                />
               )}
             </section>
           </>
@@ -2178,6 +2221,10 @@ function DashboardApp({
         {screen === "users" &&
           (profile.role === "admin" || profile.role === "superadmin") && (
             <UsersAdmin currentUid={user.uid} companyId={profile.companyId} />
+          )}
+        {screen === "report" &&
+          (profile.role === "admin" || profile.role === "superadmin") && (
+            <UsageReport items={history} />
           )}
         {screen === "errors" &&
           (profile.role === "admin" || profile.role === "superadmin") && (
@@ -2787,6 +2834,34 @@ function Capture(p: CaptureProps) {
     </section>
   );
 }
+function EmptyState({
+  icon,
+  title,
+  detail,
+  actionLabel,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="empty-state">
+      <span>
+        <Icon name={icon} />
+      </span>
+      <strong>{title}</strong>
+      <p>{detail}</p>
+      {actionLabel && onAction && (
+        <button className="outline" onClick={onAction}>
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
 function HistoryList({ items }: { items: HistoryRecord[] }) {
   return (
     <section className="panel list-panel">
@@ -2817,7 +2892,11 @@ function HistoryList({ items }: { items: HistoryRecord[] }) {
           </div>
         ))
       ) : (
-        <div className="empty">Nenhuma atividade registrada.</div>
+        <EmptyState
+          icon="clock"
+          title="Nenhuma atividade registrada"
+          detail="As ações da equipe aparecerão aqui automaticamente."
+        />
       )}
     </section>
   );
@@ -2922,6 +3001,141 @@ function formatDate(value?: Date) {
     ? value.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
     : "Agora";
 }
+function UsageReport({ items }: { items: HistoryRecord[] }) {
+  const [period, setPeriod] = useState<"7" | "30" | "all">("30");
+  const cutoff =
+    period === "all" ? 0 : Date.now() - Number(period) * 24 * 60 * 60 * 1000;
+  const selected = items.filter(
+    (item) => (item.createdAt?.toMillis() ?? 0) >= cutoff,
+  );
+  const uploads = selected.filter(
+      (item) => item.action === "photo_uploaded",
+    ).length,
+    foldersCreated = selected.filter(
+      (item) => item.action === "folder_created",
+    ).length,
+    synchronizations = selected.filter(
+      (item) => item.action === "workspace_synced",
+    ).length;
+  const actors = [
+    ...new Set(selected.map((item) => item.actorName || "Usuário")),
+  ]
+    .map((name) => {
+      const own = selected.filter(
+        (item) => (item.actorName || "Usuário") === name,
+      );
+      return {
+        name,
+        uploads: own.filter((item) => item.action === "photo_uploaded").length,
+        folders: own.filter((item) => item.action === "folder_created").length,
+        syncs: own.filter((item) => item.action === "workspace_synced").length,
+        total: own.length,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+  return (
+    <section className="usage-report">
+      <div className="report-toolbar">
+        <div>
+          <small>PROJETO PILOTO</small>
+          <h2>Uso do sistema</h2>
+          <p>Acompanhamento leve baseado nas atividades já registradas.</p>
+        </div>
+        <label>
+          Período
+          <select
+            value={period}
+            onChange={(event) =>
+              setPeriod(event.target.value as "7" | "30" | "all")
+            }
+          >
+            <option value="7">Últimos 7 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="all">Todo o período</option>
+          </select>
+        </label>
+      </div>
+      <div className="report-summary stats">
+        <Stat
+          icon="camera"
+          tone="purple"
+          label="FOTOS ENVIADAS"
+          value={String(uploads)}
+          note="Arquivos enviados no período"
+        />
+        <Stat
+          icon="folder"
+          tone="cyan"
+          label="PASTAS CRIADAS"
+          value={String(foldersCreated)}
+          note="Novas organizações"
+        />
+        <Stat
+          icon="sync"
+          tone="green"
+          label="SINCRONIZAÇÕES"
+          value={String(synchronizations)}
+          note="Conferências com o OneDrive"
+        />
+        <Stat
+          icon="users"
+          tone="amber"
+          label="USUÁRIOS ATIVOS"
+          value={String(actors.length)}
+          note={`${selected.length} atividade(s) registrada(s)`}
+        />
+      </div>
+      <section className="panel report-users">
+        <div className="panel-title">
+          <div>
+            <small>EQUIPE</small>
+            <h3>Atividade por usuário</h3>
+          </div>
+        </div>
+        {actors.length ? (
+          <>
+            <div className="report-users-heading">
+              <span>Usuário</span>
+              <span>Fotos</span>
+              <span>Pastas</span>
+              <span>Sincronizações</span>
+              <span>Total</span>
+            </div>
+            {actors.map((actor) => (
+              <article key={actor.name}>
+                <div className="report-user-name">
+                  <span>{actor.name.charAt(0).toUpperCase()}</span>
+                  <strong>{actor.name}</strong>
+                </div>
+                <b data-label="Fotos">{actor.uploads}</b>
+                <b data-label="Pastas">{actor.folders}</b>
+                <b data-label="Sincronizações">{actor.syncs}</b>
+                <strong data-label="Total">{actor.total}</strong>
+              </article>
+            ))}
+          </>
+        ) : (
+          <EmptyState
+            icon="chart"
+            title="Ainda não há atividade neste período"
+            detail="Quando a equipe enviar fotos ou sincronizar o OneDrive, os números aparecerão aqui."
+          />
+        )}
+      </section>
+      <div className="report-note">
+        <Icon name="shield" />
+        <span>
+          <strong>Relatório leve</strong>
+          <small>
+            Nenhuma foto é copiada. Os números usam somente o histórico de
+            operações do Molde Cloud.
+          </small>
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function ErrorPanel({
   companyId,
   currentUid,
@@ -3648,6 +3862,17 @@ function Icon({ name }: { name: string }) {
       <>
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
         <path d="M10 21h4" />
+      </>
+    ),
+    chart: (
+      <>
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+      </>
+    ),
+    shield: (
+      <>
+        <path d="M12 3 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6Z" />
+        <path d="m9 12 2 2 4-4" />
       </>
     ),
     desktop: (
