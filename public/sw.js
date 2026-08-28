@@ -1,4 +1,4 @@
-const CACHE = "molde-cloud-v2";
+const CACHE = "molde-cloud-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -23,11 +23,16 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const requestUrl = new URL(event.request.url);
   if (
     event.request.method !== "GET" ||
-    new URL(event.request.url).origin !== self.location.origin
+    requestUrl.origin !== self.location.origin
   )
     return;
+  if (requestUrl.searchParams.has("molde-cloud-update-check")) {
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
+    return;
+  }
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request)
