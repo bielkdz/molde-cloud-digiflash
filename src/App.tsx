@@ -174,13 +174,7 @@ export default function App() {
           <span className="brand-mark">M</span>
           <h1>Molde Cloud</h1>
           <p>Preparando seu acesso...</p>
-          <div
-            className="wave-loader"
-            role="progressbar"
-            aria-label="Preparando seu acesso"
-          >
-            <span className="wave-loader-fill" />
-          </div>
+          <div className="auth-loader" />
         </div>
       </div>
     );
@@ -3071,7 +3065,24 @@ function Capture(p: CaptureProps) {
                 <span>Enviando ao OneDrive</span>
                 <b>{p.uploadProgress ?? 0}%</b>
               </div>
-              <progress max="100" value={p.uploadProgress ?? 0} />
+              <div
+                className="upload-wave-track"
+                role="progressbar"
+                aria-label="Progresso do envio ao OneDrive"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={p.uploadProgress ?? 0}
+              >
+                <span
+                  className="upload-wave-fill"
+                  style={{
+                    width: `${Math.max(
+                      2,
+                      Math.min(100, p.uploadProgress ?? 0),
+                    )}%`,
+                  }}
+                />
+              </div>
             </div>
           )}
           <div className="capture-footer">
