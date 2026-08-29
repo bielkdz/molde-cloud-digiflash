@@ -1,0 +1,21 @@
+.dashboard .welcome{min-height:230px;padding:30px 34px;border-color:#394349;background:linear-gradient(115deg,rgba(215,45,255,.045),rgba(39,217,220,.035));box-shadow:none}
+.dashboard .welcome h2{font-size:40px;margin:8px 0 13px}
+.dashboard .welcome p{max-width:500px;margin:0 0 17px;color:#929da2}
+.dashboard .welcome .primary{min-height:49px;padding:0 20px;box-shadow:0 7px 20px rgba(35,174,184,.12)}
+.dashboard .flow-art>div{width:76px;height:76px;border-color:#3c474c;border-radius:17px;font-size:27px;box-shadow:none}
+.dashboard .flow-art>div svg{width:27px;height:27px}
+.dashboard .stats{gap:10px;margin:12px 0}
+.dashboard .stats article{min-height:78px;gap:12px;padding:13px 15px;border-color:#2d363a;border-radius:13px;background:#171b1d;box-shadow:none}
+.dashboard .stat-icon{width:38px;height:38px;border-radius:10px}
+.dashboard .stat-icon svg{width:19px;height:19px}
+.dashboard .stats strong{font-size:24px;margin:2px 0}
+.dashboard .stats .status-word{font-size:15px}
+.dashboard .stats small{font-size:8px}
+.dashboard .stats p{font-size:8px}
+.dashboard .lower-grid{grid-template-columns:minmax(0,1.65fr) minmax(250px,.75fr);gap:13px}
+.dashboard .lower-grid>.panel,.dashboard .quick{padding:19px;box-shadow:none}
+.dashboard .panel-title h3,.dashboard .quick h3{font-size:21px}
+.dashboard .quick>button{min-height:55px;margin-top:8px;padding:9px 10px;border-color:#30383c;background:#181d20}
+.dashboard .quick>button>span{width:32px;height:32px;border-color:#465158}
+@media(max-width:950px){.dashboard .lower-grid{grid-template-columns:1fr}}
+@media(max-width:680px){.dashboard .welcome{min-height:245px;padding:22px 18px}.dashboard .welcome h2{font-size:29px}.dashboard .welcome p{font-size:12px}.dashboard .stats{gap:7px}.dashboard .stats article{min-height:88px;gap:5px;padding:9px}.dashboard .stat-icon{width:33px;height:33px}.dashboard .stats strong{font-size:20px}.dashboard .stats .status-word{font-size:11px}.dashboard .lower-grid>.panel,.dashboard .quick{padding:16px}.dashboard .quick{display:grid;grid-template-columns:1fr 1fr;gap:8px}.dashboard .quick>small,.dashboard .quick>h3{grid-column:1/-1}.dashboard .quick>button{margin:0;min-height:62px}.dashboard .quick>button small{display:none}}

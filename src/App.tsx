@@ -2740,7 +2740,7 @@ function Dashboard({
           </div>
           {files.length ? (
             files
-              .slice(0, 4)
+              .slice(0, 3)
               .map((item) => (
                 <FileRow
                   key={item.id}
@@ -2753,10 +2753,9 @@ function Dashboard({
           )}
         </section>
         <section className="quick">
-          <small>ACESSO RÁPIDO</small>
-          <h3>O que deseja fazer?</h3>
+          <small>OUTROS ACESSOS</small>
+          <h3>Continue seu trabalho</h3>
           {[
-            ["camera", "Tirar foto", "Abrir câmera traseira", "capture"],
             ["folder", "Ver arquivos", "Acessar suas pastas", "files"],
             ["search", "Localizar", "Buscar foto ou pasta", "search"],
           ].map((x) => (
@@ -2790,17 +2789,33 @@ function SystemHealth({
   const storagePercent = storage?.total
     ? Math.round((storage.used / storage.total) * 100)
     : null;
+  const requiresAttention =
+    !oneDriveConnected ||
+    (storagePercent !== null && storagePercent >= 90) ||
+    (pendingErrors !== null && pendingErrors > 0);
   return (
-    <section className="system-health panel">
-      <div className="system-health-title">
-        <div>
-          <small>MONITORAMENTO</small>
-          <h3>Saúde do sistema</h3>
+    <details
+      key={requiresAttention ? "attention" : "healthy"}
+      className={`system-health panel ${requiresAttention ? "has-warning" : ""}`}
+      open={requiresAttention || undefined}
+    >
+      <summary>
+        <div className="health-summary-copy">
+          <span>
+            <Icon name={requiresAttention ? "alert" : "check"} />
+          </span>
+          <div>
+            <small>SAÚDE DO SISTEMA</small>
+            <strong>
+              {requiresAttention ? "Existe algo para verificar" : "Tudo funcionando"}
+            </strong>
+          </div>
         </div>
-        <span className={oneDriveConnected ? "healthy" : "warning"}>
-          {oneDriveConnected ? "Tudo pronto" : "Requer atenção"}
+        <span className={requiresAttention ? "warning" : "healthy"}>
+          {requiresAttention ? "Requer atenção" : "Tudo certo"}
         </span>
-      </div>
+        <b aria-hidden="true">⌄</b>
+      </summary>
       <div className="health-grid">
         <HealthItem
           icon="cloud"
@@ -2843,7 +2858,7 @@ function SystemHealth({
           tone={pendingErrors && pendingErrors > 0 ? "warning" : "healthy"}
         />
       </div>
-    </section>
+    </details>
   );
 }
 function HealthItem({
