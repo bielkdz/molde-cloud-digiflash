@@ -6,6 +6,7 @@ import "./index.css";
 import "./auth-users.css";
 import "./health-permissions.css";
 import "./dashboard-clean.css";
+import "./loading-wave.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DialogProvider>
