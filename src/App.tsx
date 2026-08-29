@@ -174,7 +174,13 @@ export default function App() {
           <span className="brand-mark">M</span>
           <h1>Molde Cloud</h1>
           <p>Preparando seu acesso...</p>
-          <div className="auth-loader" />
+          <div
+            className="wave-loader"
+            role="progressbar"
+            aria-label="Preparando seu acesso"
+          >
+            <span className="wave-loader-fill" />
+          </div>
         </div>
       </div>
     );
