@@ -668,7 +668,16 @@ function DashboardApp({
     return () => window.removeEventListener("keydown", close);
   }, [profileOpen]);
   useEffect(() => {
+    const reloadedForUpdate =
+      sessionStorage.getItem("molde-cloud:pwa-reload") === "pending";
+    if (reloadedForUpdate) {
+      sessionStorage.removeItem("molde-cloud:pwa-reload");
+      sessionStorage.removeItem("molde-cloud:update-ready");
+      setUpdateAvailable(false);
+    }
     const ready = () => {
+      if (sessionStorage.getItem("molde-cloud:pwa-reload") === "pending")
+        return;
       setUpdateAvailable(true);
       addNotification(
         "Nova versão disponível",
@@ -677,7 +686,11 @@ function DashboardApp({
         "pwa-update-ready",
       );
     };
-    if (sessionStorage.getItem("molde-cloud:update-ready") === "yes") ready();
+    if (
+      !reloadedForUpdate &&
+      sessionStorage.getItem("molde-cloud:update-ready") === "yes"
+    )
+      ready();
     window.addEventListener("molde-cloud:update-ready", ready);
     return () => window.removeEventListener("molde-cloud:update-ready", ready);
   }, []);
@@ -1267,11 +1280,37 @@ function DashboardApp({
     }
   }
   async function applyPwaUpdate() {
+    setUpdateAvailable(false);
+    sessionStorage.removeItem("molde-cloud:update-ready");
     sessionStorage.setItem("molde-cloud:pwa-reload", "pending");
-    const registration = await navigator.serviceWorker.getRegistration();
-    if (registration?.waiting)
-      registration.waiting.postMessage({ type: "SKIP_WAITING" });
-    else window.location.reload();
+    setNotifications((current) => {
+      const next = current.filter((item) => item.id !== "pwa-update-ready");
+      localStorage.setItem(
+        `molde-cloud:notifications:${profile.companyId}`,
+        JSON.stringify(next),
+      );
+      return next;
+    });
+
+    const fallbackReload = window.setTimeout(
+      () => window.location.reload(),
+      1800,
+    );
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      await registration?.update().catch(() => {});
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        return;
+      }
+      window.clearTimeout(fallbackReload);
+      window.location.reload();
+    } catch {
+      window.clearTimeout(fallbackReload);
+      sessionStorage.removeItem("molde-cloud:pwa-reload");
+      setUpdateAvailable(true);
+      setMessage("Não foi possível atualizar agora. Tente novamente.");
+    }
   }
   function toggleOneDriveMenu() {
     const next = !oneDriveMenuOpen;
