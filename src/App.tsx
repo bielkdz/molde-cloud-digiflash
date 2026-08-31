@@ -97,7 +97,8 @@ type Screen =
   | "report"
   | "errors"
   | "users"
-  | "companies";
+  | "companies"
+  | "settings";
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -111,6 +112,11 @@ type AppNotification = {
   read: boolean;
 };
 type StorageSample = { used: number; total: number; createdAt: number };
+type ConnectionTestState = {
+  status: "idle" | "testing" | "success" | "error";
+  message: string;
+  testedAt?: Date;
+};
 const nav = [
   { id: "dashboard" as Screen, label: "Início", icon: "home" },
   { id: "capture" as Screen, label: "Tirar foto", icon: "camera" },
@@ -425,7 +431,11 @@ function DashboardApp({
     [oneDriveStorage, setOneDriveStorage] = useState<OneDriveStorage | null>(
       null,
     ),
-    [oneDriveStorageLoading, setOneDriveStorageLoading] = useState(false);
+    [oneDriveStorageLoading, setOneDriveStorageLoading] = useState(false),
+    [connectionTest, setConnectionTest] = useState<ConnectionTestState>({
+      status: "idle",
+      message: "Faça um teste antes da apresentação para confirmar o acesso.",
+    });
   const [notifications, setNotifications] = useState<AppNotification[]>(() =>
       readLocalList<AppNotification>(
         `molde-cloud:notifications:${profile.companyId}`,
@@ -461,6 +471,7 @@ function DashboardApp({
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [adminNavOpen, setAdminNavOpen] = useState(false);
   const [healthErrors, setHealthErrors] = useState<ErrorLogRecord[]>([]);
+  const [companyUsers, setCompanyUsers] = useState<UserProfile[]>([]);
   const [mobileActions, setMobileActions] = useState<
     | { type: "folder"; item: FolderRecord }
     | { type: "file"; item: FileRecord }
@@ -480,6 +491,7 @@ function DashboardApp({
   const adminNav =
     profile.role === "superadmin"
       ? [
+          { id: "settings" as Screen, label: "Configurações", icon: "building" },
           { id: "report" as Screen, label: "Relatório", icon: "chart" },
           { id: "errors" as Screen, label: "Erros", icon: "alert" },
           { id: "users" as Screen, label: "Usuários", icon: "users" },
@@ -487,6 +499,7 @@ function DashboardApp({
         ]
       : profile.role === "admin"
         ? [
+            { id: "settings" as Screen, label: "Configurações", icon: "building" },
             { id: "report" as Screen, label: "Relatório", icon: "chart" },
             { id: "errors" as Screen, label: "Erros", icon: "alert" },
             { id: "users" as Screen, label: "Usuários", icon: "users" },
@@ -588,9 +601,19 @@ function DashboardApp({
   useEffect(() => {
     if (!managerAccess) {
       setHealthErrors([]);
+      setCompanyUsers([]);
       return;
     }
-    return watchErrorLogs(profile.companyId, setHealthErrors, () => {});
+    const stopErrors = watchErrorLogs(
+      profile.companyId,
+      setHealthErrors,
+      () => {},
+    );
+    const stopUsers = watchAllUsers(profile.companyId, setCompanyUsers);
+    return () => {
+      stopErrors();
+      stopUsers();
+    };
   }, [managerAccess, profile.companyId]);
   useEffect(() => {
     let active = true;
@@ -1275,6 +1298,39 @@ function DashboardApp({
     } catch (error) {
       recordError("read_onedrive_storage", error);
       setOneDriveStorage(null);
+    } finally {
+      setOneDriveStorageLoading(false);
+    }
+  }
+  async function testOneDriveConnection() {
+    if (!oneDriveAccount) {
+      setConnectionTest({
+        status: "error",
+        message: "Conecte o OneDrive antes de realizar o teste.",
+      });
+      return;
+    }
+    setConnectionTest({
+      status: "testing",
+      message: "Consultando a conta e o armazenamento do OneDrive...",
+    });
+    setOneDriveStorageLoading(true);
+    try {
+      const storage = await getOneDriveStorage();
+      const testedAt = new Date();
+      setOneDriveStorage(storage);
+      setConnectionTest({
+        status: "success",
+        message: "Conexão confirmada. O Molde Cloud consegue acessar o OneDrive.",
+        testedAt,
+      });
+    } catch (error) {
+      recordError("test_onedrive_connection", error);
+      setConnectionTest({
+        status: "error",
+        message: oneDriveErrorMessage(error),
+        testedAt: new Date(),
+      });
     } finally {
       setOneDriveStorageLoading(false);
     }
@@ -2340,6 +2396,24 @@ function DashboardApp({
             </section>
           </>
         )}
+        {screen === "settings" && managerAccess && (
+          <CompanySettings
+            company={currentCompany}
+            profile={profile}
+            users={companyUsers}
+            folderCount={folders.length}
+            fileCount={files.length}
+            oneDriveAccount={oneDriveAccount}
+            storage={oneDriveStorage}
+            storageLoading={oneDriveStorageLoading}
+            lastSynchronization={lastSynchronization}
+            connectionTest={connectionTest}
+            busy={busy}
+            online={online}
+            onTest={() => void testOneDriveConnection()}
+            onConnect={() => void reconnectOneDrive()}
+          />
+        )}
         {screen === "users" &&
           (profile.role === "admin" || profile.role === "superadmin") && (
             <UsersAdmin currentUid={user.uid} companyId={profile.companyId} />
@@ -3136,6 +3210,120 @@ function EmptyState({
     </div>
   );
 }
+function CompanySettings({
+  company,
+  profile,
+  users,
+  folderCount,
+  fileCount,
+  oneDriveAccount,
+  storage,
+  storageLoading,
+  lastSynchronization,
+  connectionTest,
+  busy,
+  online,
+  onTest,
+  onConnect,
+}: {
+  company: CompanyRecord | null;
+  profile: UserProfile;
+  users: UserProfile[];
+  folderCount: number;
+  fileCount: number;
+  oneDriveAccount: string;
+  storage: OneDriveStorage | null;
+  storageLoading: boolean;
+  lastSynchronization?: HistoryRecord;
+  connectionTest: ConnectionTestState;
+  busy: boolean;
+  online: boolean;
+  onTest: () => void;
+  onConnect: () => void;
+}) {
+  const storagePercentage =
+    storage?.total ? Math.min(100, (storage.used / storage.total) * 100) : 0;
+  const officialAccount = company?.oneDriveAccount || "Ainda não definida";
+  const connected = Boolean(oneDriveAccount);
+  return (
+    <section className="company-settings">
+      <div className="settings-intro">
+        <div className="settings-company-mark">
+          <Icon name="building" />
+        </div>
+        <div>
+          <small>CONFIGURAÇÕES DA EMPRESA</small>
+          <h2>{company?.name || "Empresa"}</h2>
+          <p>Visão geral da operação e da conexão usada pelo Molde Cloud.</p>
+        </div>
+        <span className={`settings-status ${company?.status === "active" ? "active" : ""}`}>
+          {company?.status === "active" ? "Empresa ativa" : "Atenção necessária"}
+        </span>
+      </div>
+
+      <div className="settings-metrics">
+        <article><Icon name="users" /><div><strong>{users.length}</strong><span>Usuários</span></div></article>
+        <article><Icon name="folder" /><div><strong>{folderCount}</strong><span>Pastas</span></div></article>
+        <article><Icon name="image" /><div><strong>{fileCount}</strong><span>Fotografias</span></div></article>
+        <article><Icon name="cloud" /><div><strong>{storage ? `${storagePercentage.toFixed(0)}%` : "—"}</strong><span>OneDrive usado</span></div></article>
+      </div>
+
+      <div className="settings-grid">
+        <section className="panel settings-connection">
+          <div className="settings-section-title">
+            <div>
+              <small>ONEDRIVE OFICIAL</small>
+              <h3>Conexão da empresa</h3>
+            </div>
+            <span className={connected ? "connected" : "disconnected"}>
+              <i />{connected ? "Conectado" : "Desconectado"}
+            </span>
+          </div>
+          <dl>
+            <div><dt>Conta oficial</dt><dd>{officialAccount}</dd></div>
+            <div><dt>Sessão conectada</dt><dd>{oneDriveAccount || "Nenhuma conta conectada"}</dd></div>
+            <div><dt>Armazenamento</dt><dd>{storage ? `${formatBytes(storage.used)} de ${formatBytes(storage.total)}` : storageLoading ? "Consultando..." : "Teste a conexão para consultar"}</dd></div>
+            <div><dt>Última sincronização</dt><dd>{lastSynchronization ? formatDate(lastSynchronization.createdAt?.toDate()) : "Ainda não realizada"}</dd></div>
+          </dl>
+          {storage && (
+            <div className="settings-storage" aria-label={`${storagePercentage.toFixed(0)}% do armazenamento utilizado`}>
+              <span style={{ width: `${storagePercentage}%` }} />
+            </div>
+          )}
+          <div className={`connection-result ${connectionTest.status}`} aria-live="polite">
+            <Icon name={connectionTest.status === "success" ? "shield" : connectionTest.status === "error" ? "alert" : "sync"} />
+            <div>
+              <strong>{connectionTest.status === "testing" ? "Testando conexão" : connectionTest.status === "success" ? "Conexão saudável" : connectionTest.status === "error" ? "Não foi possível confirmar" : "Verificação recomendada"}</strong>
+              <span>{connectionTest.message}{connectionTest.testedAt ? ` · ${formatDate(connectionTest.testedAt)}` : ""}</span>
+            </div>
+          </div>
+          <div className="settings-actions">
+            <button className="primary" disabled={busy || storageLoading || !online} onClick={onTest}>
+              <Icon name="sync" /> {storageLoading ? "Testando..." : "Testar conexão"}
+            </button>
+            <button className="outline" disabled={busy || !online} onClick={onConnect}>
+              <Icon name="cloud" /> {connected ? "Trocar OneDrive" : "Conectar OneDrive"}
+            </button>
+          </div>
+        </section>
+
+        <section className="panel settings-details">
+          <div className="settings-section-title">
+            <div><small>CADASTRO</small><h3>Dados da empresa</h3></div>
+          </div>
+          <dl>
+            <div><dt>Administrador</dt><dd>{company?.adminEmail || profile.email}</dd></div>
+            <div><dt>Sua permissão</dt><dd>{profile.role === "superadmin" ? "Administrador geral" : "Administrador da empresa"}</dd></div>
+            <div><dt>Criada em</dt><dd>{company?.createdAt ? formatDate(company.createdAt.toDate()) : "Data não disponível"}</dd></div>
+            <div><dt>Identificador</dt><dd className="settings-company-id">{company?.id || profile.companyId}</dd></div>
+          </dl>
+          <p className="settings-note">A troca do OneDrive altera a conta oficial usada por toda a empresa. Faça essa ação somente quando necessário.</p>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function HistoryList({ items }: { items: HistoryRecord[] }) {
   return (
     <section className="panel list-panel">
