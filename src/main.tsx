@@ -8,6 +8,7 @@ import "./health-permissions.css";
 import "./dashboard-clean.css";
 import "./loading-wave.css";
 import "./company-settings.css";
+import "./mobile-polish.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DialogProvider>
