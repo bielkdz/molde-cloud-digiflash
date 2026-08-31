@@ -9,6 +9,7 @@ import "./dashboard-clean.css";
 import "./loading-wave.css";
 import "./company-settings.css";
 import "./mobile-polish.css";
+import "./presentation-mode.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DialogProvider>
