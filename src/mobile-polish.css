@@ -1,0 +1,297 @@
+/* Revisão final de ergonomia móvel para o piloto e a apresentação. */
+html,
+body,
+#root {
+  max-width: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.workspace,
+.workspace > *,
+.panel,
+.capture-card,
+.settings-grid,
+.settings-grid > * {
+  min-width: 0;
+}
+
+.file-row strong,
+.history-row strong,
+.folder-grid strong,
+.profile-summary strong {
+  overflow-wrap: anywhere;
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 680px) {
+  .workspace,
+  .is-collapsed .workspace {
+    width: 100%;
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+
+  .workspace > header {
+    min-height: 44px;
+    gap: 10px;
+  }
+
+  .workspace > header > div:first-child {
+    min-width: 0;
+  }
+
+  .workspace > header h1 {
+    overflow: hidden;
+    font-size: clamp(25px, 8vw, 30px);
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-actions {
+    flex: 0 0 auto;
+  }
+
+  .mobile-menu,
+  .notification-button,
+  .user-chip,
+  .status {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .status {
+    display: grid;
+    place-items: center;
+    padding: 0;
+  }
+
+  .sidebar nav button,
+  .onedrive-button,
+  .install-button {
+    min-height: 52px;
+    flex-shrink: 0;
+  }
+
+  .sidebar nav .admin-nav-item {
+    min-height: 50px;
+  }
+
+  .quick-camera-button {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    min-height: 52px;
+  }
+
+  .panel,
+  .quick,
+  .capture-card {
+    max-width: 100%;
+  }
+
+  .panel-title {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .panel-title > div {
+    min-width: 0;
+  }
+
+  .panel-title h3 {
+    overflow-wrap: anywhere;
+    line-height: 1.08;
+  }
+
+  .empty-state {
+    min-height: 150px;
+    padding: 22px 14px;
+  }
+
+  .empty-state > p {
+    font-size: 11px;
+  }
+
+  .empty-state > button {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .history-row,
+  .file-row {
+    max-width: 100%;
+  }
+
+  .history-row > div,
+  .file-row > div {
+    min-width: 0;
+  }
+
+  .history-row small,
+  .file-row small {
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+  }
+
+  .file-row .file-open,
+  .folder-actions button,
+  .heading-actions button,
+  .selection-actions button,
+  .trash-files button {
+    min-height: 44px;
+  }
+
+  .capture-steps {
+    gap: 4px;
+  }
+
+  .capture-step {
+    min-width: 0;
+  }
+
+  .capture-step span {
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .capture-review {
+    align-items: flex-start;
+  }
+
+  .capture-review > div {
+    min-width: 0;
+  }
+
+  .capture-review strong {
+    overflow-wrap: anywhere;
+  }
+
+  .upload-progress {
+    padding-inline: 2px;
+  }
+
+  .update-notice,
+  .offline-notice,
+  .system-notice {
+    line-height: 1.45;
+  }
+
+  .profile-menu,
+  .notification-menu,
+  .onedrive-menu {
+    overscroll-behavior: contain;
+  }
+
+  .profile-actions > button,
+  .notification-menu > header button,
+  .onedrive-menu-actions > button {
+    touch-action: manipulation;
+  }
+
+  .settings-intro {
+    align-items: start;
+  }
+
+  .settings-intro h2,
+  .settings-section-title h3 {
+    overflow-wrap: anywhere;
+  }
+
+  .settings-section-title {
+    align-items: flex-start;
+  }
+
+  .settings-grid dd {
+    font-size: 0.9rem;
+  }
+
+  .settings-metrics article {
+    min-height: 70px;
+  }
+
+  .report-summary.stats article {
+    min-width: 0;
+  }
+
+  .report-summary.stats strong,
+  .error-summary-grid strong {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 390px) {
+  .workspace,
+  .is-collapsed .workspace {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .workspace > header {
+    gap: 7px;
+  }
+
+  .workspace > header p {
+    letter-spacing: 1px;
+  }
+
+  .notification-button,
+  .user-chip,
+  .status {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .header-actions {
+    gap: 4px;
+  }
+
+  .settings-metrics,
+  .report-summary.stats,
+  .error-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settings-metrics article {
+    gap: 8px;
+    padding: 11px;
+  }
+
+  .settings-metrics article > svg {
+    width: 18px;
+  }
+
+  .settings-metrics strong {
+    font-size: 1.05rem;
+  }
+
+  .settings-metrics span {
+    font-size: 0.72rem;
+  }
+
+  .capture-card {
+    padding-inline: 12px;
+  }
+
+  .capture-footer {
+    margin-right: -12px;
+    margin-left: -12px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-camera-button,
+  .sidebar,
+  .workspace {
+    transition: none;
+  }
+}
