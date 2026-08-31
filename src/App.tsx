@@ -117,6 +117,20 @@ type ConnectionTestState = {
   message: string;
   testedAt?: Date;
 };
+type DemoStep = {
+  screen: Screen;
+  icon: string;
+  eyebrow: string;
+  title: string;
+  detail: string;
+};
+const demoSteps: DemoStep[] = [
+  { screen: "dashboard", icon: "home", eyebrow: "VISÃO GERAL", title: "Apresente o problema e a solução", detail: "O Molde Cloud leva a fotografia original do quadro DigiFlash, feita no celular, até o OneDrive acessível no computador." },
+  { screen: "files", icon: "folder", eyebrow: "ETAPA 1", title: "Organize o trabalho em uma pasta", detail: "Crie ou escolha uma pasta com o nome do projeto. Nada é criado automaticamente durante esta demonstração." },
+  { screen: "capture", icon: "camera", eyebrow: "ETAPA 2", title: "Fotografe e confira a imagem", detail: "Abra a câmera, confira a fotografia e informe a pasta e o nome do arquivo antes do envio." },
+  { screen: "capture", icon: "cloud", eyebrow: "ETAPA 3", title: "Envie o original ao OneDrive", detail: "Mostre o progresso em onda e explique que o Firebase guarda apenas os registros; a fotografia permanece no OneDrive." },
+  { screen: "search", icon: "search", eyebrow: "RESULTADO", title: "Localize no celular e abra no computador", detail: "Pesquise pelo nome, confirme o histórico e finalize mostrando o mesmo arquivo sincronizado na pasta do OneDrive no computador." },
+];
 const nav = [
   { id: "dashboard" as Screen, label: "Início", icon: "home" },
   { id: "capture" as Screen, label: "Tirar foto", icon: "camera" },
@@ -470,6 +484,8 @@ function DashboardApp({
     [folderTrashOpen, setFolderTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [adminNavOpen, setAdminNavOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false),
+    [demoStep, setDemoStep] = useState(0);
   const [healthErrors, setHealthErrors] = useState<ErrorLogRecord[]>([]);
   const [companyUsers, setCompanyUsers] = useState<UserProfile[]>([]);
   const [mobileActions, setMobileActions] = useState<
@@ -731,6 +747,11 @@ function DashboardApp({
       window.history.pushState({ moldeCloudScreen: screen }, "");
     };
     const goBackInsideApp = (event: PopStateEvent) => {
+      if (demoOpen) {
+        setDemoOpen(false);
+        restoreCurrentEntry();
+        return;
+      }
       if (mobileActions) {
         setMobileActions(null);
         restoreCurrentEntry();
@@ -783,6 +804,7 @@ function DashboardApp({
     return () => window.removeEventListener("popstate", goBackInsideApp);
   }, [
     collapsed,
+    demoOpen,
     mobileActions,
     notificationOpen,
     oneDriveMenuOpen,
@@ -1462,6 +1484,22 @@ function DashboardApp({
     const choice = await installPrompt.userChoice;
     if (choice.outcome === "accepted") setInstallPrompt(null);
   }
+  function startDemo() {
+    setDemoStep(0);
+    setDemoOpen(true);
+    setProfileOpen(false);
+    navigateTo(demoSteps[0].screen);
+  }
+  function changeDemoStep(next: number) {
+    if (next < 0) return;
+    if (next >= demoSteps.length) {
+      setDemoOpen(false);
+      navigateTo("dashboard");
+      return;
+    }
+    setDemoStep(next);
+    navigateTo(demoSteps[next].screen);
+  }
   function navigateTo(next: Screen) {
     if (next !== screen) {
       window.history.pushState({ moldeCloudScreen: next }, "");
@@ -1850,6 +1888,15 @@ function DashboardApp({
                     </span>
                   </div>
                   <div className="profile-actions">
+                    {managerAccess && (
+                      <button role="menuitem" onClick={startDemo}>
+                        <Icon name="desktop" />
+                        <span>
+                          <strong>Modo demonstração</strong>
+                          <small>Guia para apresentar o Molde Cloud</small>
+                        </span>
+                      </button>
+                    )}
                     {(profile.role === "admin" ||
                       profile.role === "superadmin") && (
                       <button
@@ -1951,6 +1998,7 @@ function DashboardApp({
                     .length
                 : null
             }
+            startDemo={managerAccess ? startDemo : undefined}
             go={navigateTo}
             openFile={setPreviewFile}
           />
@@ -2445,6 +2493,14 @@ function DashboardApp({
         capture="environment"
         onChange={(e) => choosePhoto(e.target.files?.[0])}
       />
+      {demoOpen && (
+        <DemoTour
+          step={demoStep}
+          onPrevious={() => changeDemoStep(demoStep - 1)}
+          onNext={() => changeDemoStep(demoStep + 1)}
+          onClose={() => setDemoOpen(false)}
+        />
+      )}
       {screen !== "capture" && (
         <button
           className="quick-camera-button"
@@ -2723,6 +2779,7 @@ function Dashboard({
   oneDriveStorage,
   lastSynchronization,
   pendingErrors,
+  startDemo,
   go,
   openFile,
 }: {
@@ -2732,6 +2789,7 @@ function Dashboard({
   oneDriveStorage: OneDriveStorage | null;
   lastSynchronization?: HistoryRecord;
   pendingErrors: number | null;
+  startDemo?: () => void;
   go: (s: Screen) => void;
   openFile: (file: FileRecord) => void;
 }) {
@@ -2749,9 +2807,16 @@ function Dashboard({
             O Molde Cloud organiza a fotografia e envia o arquivo original para
             sua pasta no OneDrive.
           </p>
-          <button className="primary" onClick={() => go("capture")}>
-            <Icon name="camera" /> Tirar nova foto
-          </button>
+          <div className="welcome-actions">
+            <button className="primary" onClick={() => go("capture")}>
+              <Icon name="camera" /> Tirar nova foto
+            </button>
+            {startDemo && (
+              <button className="outline demo-start-button" onClick={startDemo}>
+                <Icon name="desktop" /> Iniciar apresentação
+              </button>
+            )}
+          </div>
         </div>
         <div className="flow-art">
           <div>
@@ -3182,6 +3247,45 @@ function Capture(p: CaptureProps) {
     </section>
   );
 }
+function DemoTour({
+  step,
+  onPrevious,
+  onNext,
+  onClose,
+}: {
+  step: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}) {
+  const current = demoSteps[step];
+  const last = step === demoSteps.length - 1;
+  return (
+    <div className="demo-tour-backdrop" role="presentation">
+      <section className="demo-tour" role="dialog" aria-modal="true" aria-label="Modo demonstração do Molde Cloud">
+        <header>
+          <div className="demo-tour-icon"><Icon name={current.icon} /></div>
+          <div><small>{current.eyebrow}</small><strong>Modo demonstração</strong></div>
+          <button className="demo-tour-close" onClick={onClose} aria-label="Encerrar demonstração">×</button>
+        </header>
+        <div className="demo-tour-progress" aria-label={`Etapa ${step + 1} de ${demoSteps.length}`}>
+          {demoSteps.map((item, index) => <i key={item.title} className={index <= step ? "active" : ""} />)}
+        </div>
+        <div className="demo-tour-copy">
+          <span>Etapa {step + 1} de {demoSteps.length}</span>
+          <h2>{current.title}</h2>
+          <p>{current.detail}</p>
+          <em>Este guia não cria, altera nem envia nenhum arquivo.</em>
+        </div>
+        <footer>
+          <button className="outline" disabled={step === 0} onClick={onPrevious}>Voltar</button>
+          <button className="primary" onClick={onNext}>{last ? "Concluir apresentação" : "Próxima etapa"}</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function EmptyState({
   icon,
   title,
