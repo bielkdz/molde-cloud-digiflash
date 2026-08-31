@@ -3291,7 +3291,7 @@ function CompanySettings({
             </div>
           )}
           <div className={`connection-result ${connectionTest.status}`} aria-live="polite">
-            <Icon name={connectionTest.status === "success" ? "check" : connectionTest.status === "error" ? "alert" : "sync"} />
+            <Icon name={connectionTest.status === "success" ? "shield" : connectionTest.status === "error" ? "alert" : "sync"} />
             <div>
               <strong>{connectionTest.status === "testing" ? "Testando conexão" : connectionTest.status === "success" ? "Conexão saudável" : connectionTest.status === "error" ? "Não foi possível confirmar" : "Verificação recomendada"}</strong>
               <span>{connectionTest.message}{connectionTest.testedAt ? ` · ${formatDate(connectionTest.testedAt)}` : ""}</span>
