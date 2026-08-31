@@ -128,7 +128,7 @@ const demoSteps: DemoStep[] = [
   { screen: "dashboard", icon: "home", eyebrow: "VISÃO GERAL", title: "Apresente o problema e a solução", detail: "O Molde Cloud leva a fotografia original do quadro DigiFlash, feita no celular, até o OneDrive acessível no computador." },
   { screen: "files", icon: "folder", eyebrow: "ETAPA 1", title: "Organize o trabalho em uma pasta", detail: "Crie ou escolha uma pasta com o nome do projeto. Nada é criado automaticamente durante esta demonstração." },
   { screen: "capture", icon: "camera", eyebrow: "ETAPA 2", title: "Fotografe e confira a imagem", detail: "Abra a câmera, confira a fotografia e informe a pasta e o nome do arquivo antes do envio." },
-  { screen: "capture", icon: "cloud", eyebrow: "ETAPA 3", title: "Envie o original ao OneDrive", detail: "Mostre o progresso em onda e explique que o Firebase guarda apenas os registros; a fotografia permanece no OneDrive." },
+  { screen: "capture", icon: "cloud", eyebrow: "ETAPA 3", title: "Envie o original ao OneDrive", detail: "Mostre o progresso em onda e explique que a fotografia original é enviada com segurança para o OneDrive da empresa." },
   { screen: "search", icon: "search", eyebrow: "RESULTADO", title: "Localize no celular e abra no computador", detail: "Pesquise pelo nome, confirme o histórico e finalize mostrando o mesmo arquivo sincronizado na pasta do OneDrive no computador." },
 ];
 const nav = [
@@ -3247,6 +3247,56 @@ function Capture(p: CaptureProps) {
     </section>
   );
 }
+function DemoVisual({ step }: { step: number }) {
+  if (step === 0)
+    return (
+      <div className="demo-visual demo-visual-flow" aria-label="Fluxo do celular para o computador">
+        <div><Icon name="camera" /><small>CELULAR</small></div>
+        <span>→</span>
+        <div><Icon name="cloud" /><small>ONEDRIVE</small></div>
+        <span>→</span>
+        <div><Icon name="desktop" /><small>COMPUTADOR</small></div>
+      </div>
+    );
+  if (step === 1)
+    return (
+      <div className="demo-visual demo-visual-folder" aria-label="Organização das fotografias em pastas">
+        <div className="demo-folder-main"><Icon name="folder" /><strong>Projeto</strong></div>
+        <div className="demo-folder-files">
+          <span><Icon name="image" /> Frente</span>
+          <span><Icon name="image" /> Costas</span>
+          <span><Icon name="image" /> Detalhes</span>
+        </div>
+      </div>
+    );
+  if (step === 2)
+    return (
+      <div className="demo-visual demo-visual-camera" aria-label="Captura da fotografia pelo celular">
+        <div className="demo-phone">
+          <span className="demo-phone-camera"><Icon name="camera" /></span>
+          <i /><i /><i /><i />
+        </div>
+        <div><strong>Fotografe</strong><small>Confira antes de enviar</small></div>
+      </div>
+    );
+  if (step === 3)
+    return (
+      <div className="demo-visual demo-visual-upload" aria-label="Envio seguro ao OneDrive">
+        <div className="demo-upload-file"><Icon name="image" /></div>
+        <div className="demo-upload-route"><i /><i /><i /></div>
+        <div className="demo-upload-cloud"><Icon name="cloud" /><strong>OneDrive</strong></div>
+        <div className="demo-upload-progress"><span /><b>Enviando com segurança</b></div>
+      </div>
+    );
+  return (
+    <div className="demo-visual demo-visual-search" aria-label="Arquivo localizado no celular e no computador">
+      <div className="demo-search-box"><Icon name="search" /><span>Molde camisa</span></div>
+      <div className="demo-search-result"><Icon name="image" /><div><strong>Molde camisa</strong><small>Arquivo encontrado</small></div><b>✓</b></div>
+      <Icon name="desktop" />
+    </div>
+  );
+}
+
 function DemoTour({
   step,
   onPrevious,
@@ -3271,6 +3321,7 @@ function DemoTour({
         <div className="demo-tour-progress" aria-label={`Etapa ${step + 1} de ${demoSteps.length}`}>
           {demoSteps.map((item, index) => <i key={item.title} className={index <= step ? "active" : ""} />)}
         </div>
+        <DemoVisual step={step} />
         <div className="demo-tour-copy">
           <span>Etapa {step + 1} de {demoSteps.length}</span>
           <h2>{current.title}</h2>
