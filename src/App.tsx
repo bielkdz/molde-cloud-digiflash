@@ -3383,6 +3383,9 @@ function CommercialPresentation({ step, onPrevious, onNext, onClose, onScreen, o
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
+    if (panelRef.current) panelRef.current.scrollTop = 0;
+  }, [step]);
+  useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
