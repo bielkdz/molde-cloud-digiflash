@@ -484,6 +484,8 @@ function DashboardApp({
     [folderTrashOpen, setFolderTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [adminNavOpen, setAdminNavOpen] = useState(false);
+  const [demoMode, setDemoMode] = useState<"commercial" | "guide">("commercial");
+  const [demoPaused, setDemoPaused] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false),
     [demoStep, setDemoStep] = useState(0);
   const [healthErrors, setHealthErrors] = useState<ErrorLogRecord[]>([]);
@@ -1485,20 +1487,30 @@ function DashboardApp({
     if (choice.outcome === "accepted") setInstallPrompt(null);
   }
   function startDemo() {
+    setDemoMode("commercial");
     setDemoStep(0);
+    setDemoPaused(false);
     setDemoOpen(true);
     setProfileOpen(false);
-    navigateTo(demoSteps[0].screen);
+    setNotificationOpen(false);
+    setOneDriveMenuOpen(false);
+    setCollapsed(true);
   }
   function changeDemoStep(next: number) {
+    const steps = demoMode === "commercial" ? commercialSteps : demoSteps;
     if (next < 0) return;
-    if (next >= demoSteps.length) {
+    if (next >= steps.length) {
       setDemoOpen(false);
-      navigateTo("dashboard");
+      setDemoPaused(false);
       return;
     }
     setDemoStep(next);
-    navigateTo(demoSteps[next].screen);
+    if (demoMode === "guide") navigateTo(demoSteps[next].screen);
+  }
+  function showPresentationScreen(next: Screen) {
+    setDemoOpen(false);
+    setDemoPaused(true);
+    navigateTo(next);
   }
   function navigateTo(next: Screen) {
     if (next !== screen) {
@@ -1892,8 +1904,8 @@ function DashboardApp({
                       <button role="menuitem" onClick={startDemo}>
                         <Icon name="desktop" />
                         <span>
-                          <strong>Modo demonstração</strong>
-                          <small>Guia para apresentar o Molde Cloud</small>
+                          <strong>Apresentação comercial</strong>
+                          <small>Conheça os benefícios e veja o sistema</small>
                         </span>
                       </button>
                     )}
@@ -2493,7 +2505,24 @@ function DashboardApp({
         capture="environment"
         onChange={(e) => choosePhoto(e.target.files?.[0])}
       />
-      {demoOpen && (
+      {demoPaused && managerAccess && (
+        <div className="commercial-resume" role="region" aria-label="Apresentação pausada">
+          <span>Apresentação pausada · ações nesta tela são reais</span>
+          <button className="outline" disabled={busy} onClick={() => { setDemoPaused(false); setDemoOpen(true); }}>Retomar apresentação</button>
+          <button className="outline" onClick={() => setDemoPaused(false)}>Encerrar</button>
+        </div>
+      )}
+      {demoOpen && managerAccess && demoMode === "commercial" && (
+        <CommercialPresentation
+          step={demoStep}
+          onPrevious={() => changeDemoStep(demoStep - 1)}
+          onNext={() => changeDemoStep(demoStep + 1)}
+          onClose={() => { setDemoOpen(false); setDemoPaused(false); }}
+          onScreen={showPresentationScreen}
+          onGuide={() => { setDemoMode("guide"); setDemoStep(0); navigateTo("dashboard"); }}
+        />
+      )}
+      {demoOpen && managerAccess && demoMode === "guide" && (
         <DemoTour
           step={demoStep}
           onPrevious={() => changeDemoStep(demoStep - 1)}
@@ -3297,6 +3326,124 @@ function DemoVisual({ step }: { step: number }) {
   );
 }
 
+
+const commercialSteps: {
+  chapter: string; title: string; detail: string;
+  points: string[]; visual: number; screen: Screen; action: string;
+}[] = [
+  {
+    chapter: "01 / O DESAFIO",
+    title: "A foto está pronta. O trabalho ainda não.",
+    detail: "Entre fotografar o molde e abrir a imagem no computador, arquivos podem se perder entre mensagens, transferências e pastas sem padrão.",
+    points: ["Fotos dispersas no celular", "Transferências manuais a cada trabalho", "Tempo gasto procurando o arquivo certo"],
+    visual: 1, screen: "files", action: "Ver organização de arquivos",
+  },
+  {
+    chapter: "02 / A SOLUÇÃO",
+    title: "Do quadro ao computador. Um fluxo organizado.",
+    detail: "O Molde Cloud conecta a captura no celular à pasta da empresa no OneDrive. A imagem chega ao lugar onde o trabalho continua.",
+    points: ["Pasta e nome definidos antes do envio", "Fotografia original no OneDrive", "Acesso no PC com o OneDrive configurado"],
+    visual: 0, screen: "dashboard", action: "Conhecer a tela inicial",
+  },
+  {
+    chapter: "03 / O PRODUTO",
+    title: "Fotografe. Confira. Envie.",
+    detail: "Uma sequência guiada para escolher a imagem, organizar o arquivo e acompanhar o envio — sem depender de conversas para transportar as fotos.",
+    points: ["Conferência antes de enviar", "Progresso visível durante o envio", "Pesquisa e visualização dos arquivos"],
+    visual: 2, screen: "capture", action: "Ver a captura real",
+  },
+  {
+    chapter: "04 / A EMPRESA",
+    title: "Organização também é controle.",
+    detail: "A empresa reúne sua equipe, seus registros e sua conta oficial do OneDrive em um ambiente de trabalho próprio.",
+    points: ["Aprovação e permissões de usuários", "Histórico de atividades", "Configurações e teste da conexão"],
+    visual: 3, screen: "settings", action: "Ver configurações reais",
+  },
+  {
+    chapter: "05 / EXPERIÊNCIA REAL",
+    title: "Um piloto dentro da rotina.",
+    detail: "O sistema já está em uso individual em uma empresa. O retorno inicial relatado é positivo, com acompanhamento contínuo da operação.",
+    points: ["Uso real, não apenas uma ideia", "Ajustes a partir da experiência no celular", "Ainda sem métricas de economia de tempo"],
+    visual: 4, screen: "history", action: "Ver histórico real",
+  },
+  {
+    chapter: "06 / NA PRÁTICA",
+    title: "Veja o arquivo chegar ao computador.",
+    detail: "A demonstração final acompanha um trabalho completo: escolher a pasta, fotografar, enviar e abrir a imagem no computador.",
+    points: ["Internet e OneDrive conectados", "Uma fotografia autorizada para demonstrar", "A mesma conta sincronizada no computador"],
+    visual: 0, screen: "capture", action: "Começar demonstração ao vivo",
+  },
+];
+
+function CommercialPresentation({ step, onPrevious, onNext, onClose, onScreen, onGuide }: {
+  step: number; onPrevious: () => void; onNext: () => void;
+  onClose: () => void; onScreen: (screen: Screen) => void; onGuide: () => void;
+}) {
+  const current = commercialSteps[step];
+  const panelRef = useRef<HTMLElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (panelRef.current) panelRef.current.scrollTop = 0;
+  }, [step]);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = overflow;
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+  return (
+    <section ref={panelRef} className="commercial-deck" role="dialog" aria-modal="true"
+      aria-label="Apresentação comercial do Molde Cloud"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); onClose(); }
+        if (event.key === "ArrowRight") { event.preventDefault(); onNext(); }
+        if (event.key === "ArrowLeft") { event.preventDefault(); onPrevious(); }
+        if (event.key === "Tab") {
+          const buttons = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") || []);
+          const first = buttons[0], last = buttons[buttons.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }
+      }}>
+      <header className="commercial-header">
+        <div><strong>MOLDE CLOUD</strong><span>Do celular ao computador</span></div>
+        <div className="commercial-header-actions">
+          <button className="outline" onClick={onGuide}>Como usar</button>
+          <button ref={closeRef} className="outline" onClick={onClose} aria-label="Fechar apresentação">Fechar ×</button>
+        </div>
+      </header>
+      <div className="commercial-body" key={step}>
+        <div className="commercial-copy">
+          <small>{current.chapter}</small>
+          <h2>{current.title}</h2>
+          <p>{current.detail}</p>
+          <ul>{current.points.map(point => <li key={point}>{point}</li>)}</ul>
+          <button className="primary" onClick={() => onScreen(current.screen)}>{current.action} →</button>
+          <span className="commercial-live-note">Abre o sistema real. Dados da empresa poderão aparecer; ações não são simuladas.</span>
+        </div>
+        <div className="commercial-media">
+          {step === 3 ? (
+            <div className="commercial-control" role="img" aria-label="Controle da empresa: equipe, histórico e OneDrive">
+              <Icon name="shield" /><strong>Sua empresa no controle</strong>
+              <div><span><Icon name="users" />Equipe</span><span><Icon name="clock" />Histórico</span><span><Icon name="cloud" />OneDrive</span></div>
+            </div>
+          ) : <DemoVisual step={current.visual} />}
+          <p>{step === 4 ? "Experiência inicial relatada pelo responsável pelo piloto." : "Ilustração do fluxo · explore a tela real pelo botão ao lado."}</p>
+        </div>
+      </div>
+      <footer className="commercial-footer">
+        <button className="outline" disabled={step === 0} onClick={onPrevious}>← Voltar</button>
+        <div className="commercial-page" aria-live="polite"><strong>{step + 1} / {commercialSteps.length}</strong><span>{current.chapter.split(" / ")[1]}</span></div>
+        <button className="primary" onClick={onNext}>{step === commercialSteps.length - 1 ? "Concluir" : "Próximo →"}</button>
+      </footer>
+    </section>
+  );
+}
+
 function DemoTour({
   step,
   onPrevious,
@@ -3312,10 +3459,10 @@ function DemoTour({
   const last = step === demoSteps.length - 1;
   return (
     <div className="demo-tour-backdrop" role="presentation">
-      <section className="demo-tour" role="dialog" aria-modal="true" aria-label="Modo demonstração do Molde Cloud">
+      <section className="demo-tour" role="dialog" aria-modal="true" aria-label="Como usar o Molde Cloud">
         <header>
           <div className="demo-tour-icon"><Icon name={current.icon} /></div>
-          <div><small>{current.eyebrow}</small><strong>Modo demonstração</strong></div>
+          <div><small>{current.eyebrow}</small><strong>Como usar</strong></div>
           <button className="demo-tour-close" onClick={onClose} aria-label="Encerrar demonstração">×</button>
         </header>
         <div className="demo-tour-progress" aria-label={`Etapa ${step + 1} de ${demoSteps.length}`}>
