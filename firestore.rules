@@ -6,6 +6,21 @@ service cloud.firestore {
     function accessPath() { return /databases/$(database)/documents/settings/access; }
     function companyPath(companyId) { return /databases/$(database)/documents/companies/$(companyId); }
     function invitationPath(email) { return /databases/$(database)/documents/companyInvites/$(email); }
+    function identityPath(uid) { return /databases/$(database)/documents/verifiedIdentities/$(uid); }
+    function authenticatedEmail(data) {
+      return request.auth.token.email is string && data.email == request.auth.token.email;
+    }
+    function verifiedAdmin(uid) {
+      return exists(identityPath(uid))
+        && get(identityPath(uid)).data.email == request.resource.data.email;
+    }
+    function safeAdminAssignment(uid) {
+      return request.resource.data.role != "admin"
+        || (resource.data.role == "admin"
+          && request.resource.data.companyId == resource.data.companyId
+          && request.resource.data.email == resource.data.email)
+        || verifiedAdmin(uid);
+    }
     function hasProfile() { return signedIn() && exists(userPath(request.auth.uid)); }
     function currentProfile() { return get(userPath(request.auth.uid)).data; }
     function currentCompany() { return currentProfile().companyId; }
@@ -93,6 +108,19 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Written only by the email owner using a verified authentication token.
+    // A separate collection avoids trusting arbitrary legacy profile fields.
+    match /verifiedIdentities/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin()
+        || (isCompanyAdmin() && get(userPath(uid)).data.companyId == currentCompany()));
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.auth.token.email_verified == true
+        && authenticatedEmail(request.resource.data)
+        && request.resource.data.keys().hasOnly(["email", "verifiedAt"])
+        && request.resource.data.verifiedAt == request.time;
+      allow delete: if false;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid
@@ -101,6 +129,8 @@ service cloud.firestore {
       );
       allow create: if signedIn()
         && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && authenticatedEmail(request.resource.data)
         && (
           (request.resource.data.companyId == "rosa-atelie" && request.resource.data.role == "pending")
           || isInitialOwnerClaim(uid)
@@ -108,11 +138,15 @@ service cloud.firestore {
         );
       allow update: if isInitialOwnerClaim(uid)
         || (isSuperAdmin()
+          && safeAdminAssignment(uid)
+          && request.resource.data.email == resource.data.email
           && (
             (isOwner(uid) && request.resource.data.role == "superadmin")
             || (!isOwner(uid) && request.resource.data.role != "superadmin")
           ))
         || (isCompanyAdmin()
+          && safeAdminAssignment(uid)
+          && request.resource.data.email == resource.data.email
           && !isOwner(uid)
           && "companyId" in resource.data
           && resource.data.companyId == currentCompany()
@@ -120,6 +154,7 @@ service cloud.firestore {
           && request.resource.data.role != "superadmin")
         || (signedIn()
           && request.auth.uid == uid
+          && authenticatedEmail(request.resource.data)
           && (
             (request.resource.data.role == resource.data.role
               && request.resource.data.companyId == ("companyId" in resource.data ? resource.data.companyId : "rosa-atelie")

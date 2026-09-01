@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   query,
   runTransaction,
@@ -53,6 +54,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
   const accessRef = doc(db, "settings", "access");
   const normalizedEmail = user.email?.trim().toLowerCase() || "";
   const invitationRef = normalizedEmail ? doc(db, "companyInvites", normalizedEmail) : null;
+  const token = await user.getIdTokenResult();
 
   return runTransaction(db, async (transaction) => {
     const [accessSnapshot, profileSnapshot, invitationSnapshot] = await Promise.all([
@@ -68,7 +70,7 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
     const isOwner = accessSnapshot.data()?.ownerUid === user.uid;
     const canClaimInvitation = Boolean(invitation?.companyId)
       && !invitation?.claimedBy
-      && (!existing || existing.role === "pending" || existing.role === "blocked");
+      && !isOwner;
     const needsManualApproval = existing?.role === "admin"
       && !user.emailVerified
       && invitation?.claimedBy === user.uid
@@ -92,6 +94,13 @@ export async function ensureUserProfile(user: User): Promise<UserProfile> {
         ownerUid: user.uid,
         ownerEmail: OWNER_EMAIL,
         createdAt: serverTimestamp(),
+      });
+    }
+
+    if (token.claims.email_verified === true && token.claims.email === user.email) {
+      transaction.set(doc(db, "verifiedIdentities", user.uid), {
+        email: user.email,
+        verifiedAt: serverTimestamp(),
       });
     }
 
@@ -131,10 +140,18 @@ export function watchAllUsers(companyId: string, onChange: (users: UserProfile[]
   });
 }
 
-export function changeUserRole(uid: string, role: UserRole, companyId: string, approvedBy?: string) {
+export async function changeUserRole(uid: string, role: UserRole, companyId: string, approvedBy?: string) {
   const normalizedCompanyId = companyId?.trim();
   if (!normalizedCompanyId && role !== "blocked") {
     return Promise.reject(new Error("Este cadastro não possui uma empresa válida."));
+  }
+  if (role === "admin") {
+    const [profile, identity] = await Promise.all([
+      getDoc(doc(db, "users", uid)), getDoc(doc(db, "verifiedIdentities", uid)),
+    ]);
+    if (!identity.exists() || identity.data().email !== profile.data()?.email) {
+      throw new Error("O usuário precisa confirmar o e-mail e entrar novamente antes de ser aprovado como administrador.");
+    }
   }
   return updateDoc(doc(db, "users", uid), {
     role,

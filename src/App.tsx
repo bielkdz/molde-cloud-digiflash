@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -214,6 +215,7 @@ export default function App() {
         title="Cadastro aguardando aprovação"
         message="O administrador precisa liberar seu acesso. Esta tela será atualizada automaticamente."
         user={user}
+        verifyEmail
       />
     );
   if (profile.role === "blocked")
@@ -394,11 +396,35 @@ function AccessScreen({
   title,
   message,
   user,
+  verifyEmail = false,
 }: {
   title: string;
   message: string;
   user: User;
+  verifyEmail?: boolean;
 }) {
+  const [verificationMessage, setVerificationMessage] = useState("");
+  const [verificationBusy, setVerificationBusy] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(user.emailVerified);
+  async function verify(check: boolean) {
+    setVerificationBusy(true);
+    try {
+      if (check) {
+        await user.reload();
+        await user.getIdToken(true);
+        await ensureUserProfile(user);
+        setEmailVerified(user.emailVerified);
+        setVerificationMessage(user.emailVerified
+          ? "E-mail confirmado. O administrador já pode aprovar seu acesso."
+          : "Abra o link enviado ao seu e-mail e tente novamente.");
+      } else {
+        await sendEmailVerification(user);
+        setVerificationMessage("Link enviado. Confira sua caixa de entrada e spam.");
+      }
+    } catch {
+      setVerificationMessage("Não foi possível confirmar agora. Aguarde um pouco e tente novamente.");
+    } finally { setVerificationBusy(false); }
+  }
   return (
     <div className="auth-screen">
       <div className="auth-card access-card">
@@ -407,6 +433,12 @@ function AccessScreen({
         <h2>{title}</h2>
         <p>{message}</p>
         <strong>{user.email}</strong>
+        {verifyEmail && !emailVerified && <>
+          <p>Para receber acesso de administrador, confirme seu e-mail primeiro.</p>
+          <button className="outline full" disabled={verificationBusy} onClick={() => void verify(false)}>Enviar confirmação de e-mail</button>
+          <button className="outline full" disabled={verificationBusy} onClick={() => void verify(true)}>Já confirmei meu e-mail</button>
+        </>}
+        {verificationMessage && <p role="status">{verificationMessage}</p>}
         <button className="outline full" onClick={() => signOut(auth)}>
           Sair da conta
         </button>
@@ -425,6 +457,7 @@ function DashboardApp({
   notice: string;
 }) {
   const dialog = useDialog();
+  const uploadingPhoto = useRef(false);
   const [screen, setScreen] = useState<Screen>("dashboard"),
     [collapsed, setCollapsed] = useState(true);
   const [folders, setFolders] = useState<FolderRecord[]>([]),
@@ -1242,6 +1275,12 @@ function DashboardApp({
     setBusy(true);
     setMessage("Comparando pastas e arquivos com o OneDrive...");
     try {
+      const account = await getOneDriveAccount();
+      if (!account || !await verifyCompanyOneDrive(profile.companyId, profile.role, account.username)) {
+        setOneDriveAccount("");
+        setMessage("A conta conectada não corresponde ao OneDrive oficial. Reconecte antes de sincronizar.");
+        return;
+      }
       const snapshot = await readOneDriveSnapshot();
       const result = await synchronizeWorkspace(
         workspaceActor,
@@ -1250,7 +1289,7 @@ function DashboardApp({
         snapshot,
       );
       setMessage(
-        `Sincronização concluída: ${result.removedFolders} pasta(s) e ${result.removedFiles} arquivo(s) removido(s); ${result.updated} atualizado(s).`,
+        `Sincronização concluída: ${result.updated} registro(s) atualizado(s). ${result.missingFolders} pasta(s) e ${result.missingFiles} arquivo(s) não localizado(s) foram preservados. Nenhum registro foi apagado.`,
       );
     } catch (error) {
       recordError("synchronize_onedrive", error);
@@ -1429,12 +1468,14 @@ function DashboardApp({
     }
   }
   async function savePhoto() {
+    if (uploadingPhoto.current || !online) return;
     const folder = folders.find((item) => item.id === folderId);
     if (!folder || !photoFile || !fileName.trim()) return;
     if (!oneDriveAccount) {
       setMessage("Conecte o OneDrive antes de enviar a foto.");
       return;
     }
+    uploadingPhoto.current = true;
     setBusy(true);
     setUploadProgress(0);
     setMessage("Preparando o envio para o OneDrive...");
@@ -1451,6 +1492,7 @@ function DashboardApp({
       setMessage(oneDriveErrorMessage(error));
       setBusy(false);
       setUploadProgress(null);
+      uploadingPhoto.current = false;
       return;
     }
     try {
@@ -1474,6 +1516,7 @@ function DashboardApp({
     } finally {
       setBusy(false);
       setUploadProgress(null);
+      uploadingPhoto.current = false;
     }
   }
   async function signOutApp() {
@@ -4292,8 +4335,8 @@ function UsersAdmin({
     try {
       await changeUserRole(uid, role, companyId, currentUid);
       setMessage("Permissão atualizada com sucesso.");
-    } catch {
-      setMessage("Não foi possível atualizar esta permissão.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar esta permissão.");
     }
   }
   async function setDetailedPermission(
@@ -4514,7 +4557,7 @@ function CompaniesAdmin({ currentUid }: { currentUid: string }) {
       await createCompany(name, adminEmail, currentUid);
       setName("");
       setAdminEmail("");
-      setMessage("Empresa criada e administrador definido com sucesso.");
+      setMessage("Empresa criada. O administrador convidado deve entrar, confirmar o e-mail e aguardar sua aprovação.");
     } catch (error) {
       setMessage(
         error instanceof Error

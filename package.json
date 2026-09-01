@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "npx --yes firebase-tools@14.17.0 emulators:exec --only firestore --project demo-molde-cloud \"vitest run tests/firestore.rules.test.ts\""
+    "test": "npx --yes firebase-tools@14.17.0 emulators:exec --only firestore --project demo-molde-cloud \"vitest run\""
   },
   "dependencies": {
     "@azure/msal-browser": "^5.19.0",

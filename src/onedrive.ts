@@ -381,10 +381,12 @@ export async function uploadPhotoToOneDrive(
   onProgress?.(12);
   const uploadName = fileNameWithExtension(name, file);
   const token = await getAccessToken();
-  const url = `${graphBaseUrl}/me/drive/items/${folder.id}:/${encodeURIComponent(uploadName)}:/content`;
+  // The service enforces the conflict atomically, including concurrent uploads.
+  const url = `${graphBaseUrl}/me/drive/items/${folder.id}:/${encodeURIComponent(uploadName)}:/content?@microsoft.graph.conflictBehavior=fail`;
   return new Promise<OneDriveUpload>((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("PUT", url);
+    request.timeout = 120000;
     request.setRequestHeader("Authorization", `Bearer ${token}`);
     request.setRequestHeader(
       "Content-Type",
@@ -396,8 +398,14 @@ export async function uploadPhotoToOneDrive(
     });
     request.addEventListener("load", () => {
       if (request.status >= 200 && request.status < 300) {
-        onProgress?.(100);
-        resolve(JSON.parse(request.responseText) as OneDriveUpload);
+        try {
+          const result = JSON.parse(request.responseText) as OneDriveUpload;
+          if (!result.id || !result.name) throw new Error("invalid response");
+          onProgress?.(100);
+          resolve(result);
+        } catch {
+          reject(new Error("onedrive/invalid-upload-response"));
+        }
       } else {
         reject(new Error(`onedrive/${request.status}:${request.responseText}`));
       }
@@ -408,12 +416,17 @@ export async function uploadPhotoToOneDrive(
     request.addEventListener("abort", () =>
       reject(new Error("onedrive/upload-cancelled")),
     );
+    request.addEventListener("timeout", () => reject(new Error("onedrive/upload-timeout")));
     request.send(file);
   });
 }
 
 export function oneDriveErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "";
+  if (message.startsWith("onedrive/409:"))
+    return "Já existe um arquivo com esse nome na pasta. Escolha outro nome; a foto anterior foi preservada.";
+  if (["onedrive/upload-timeout", "onedrive/invalid-upload-response"].includes(message))
+    return "Não foi possível confirmar o envio. Confira o OneDrive antes de tentar novamente; sua foto continua selecionada.";
   const code =
     typeof error === "object" &&
     error &&

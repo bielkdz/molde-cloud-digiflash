@@ -25,6 +25,14 @@ Aplicativo web para fotografar moldes no celular, salvar no OneDrive e acessar o
 
 O primeiro acesso da conta proprietária configurada nas regras pode assumir com segurança o perfil de administrador geral. As regras do Firestore impedem que outro usuário conceda essa função pelo navegador.
 
+## Proteções de identidade e arquivos
+
+- O e-mail do perfil deve corresponder ao token autenticado. Novas atribuições de administrador exigem uma identidade de e-mail confirmado, registrada pelo próprio titular em `verifiedIdentities` e validada pelas regras.
+- Criar uma empresa gera um convite, não promove automaticamente contas encontradas pelo e-mail do perfil. O convidado entra, confirma seu e-mail (ou utiliza Google com e-mail confirmado) e aguarda aprovação manual. Administradores existentes não são removidos por essa mudança.
+- Envios usam `@microsoft.graph.conflictBehavior=fail`: se o nome já existir, o arquivo anterior não é substituído e a fotografia permanece selecionada para renomeação. O conteúdo original é enviado sem conversão.
+- A sincronização atualiza registros encontrados e informa os ausentes, sem apagá-los. Trocar o OneDrive não migra fotografias: os arquivos anteriores continuam na conta de origem. Exclusões continuam disponíveis somente pelas ações explícitas de exclusão.
+- `npm test` executa testes de regras no emulador e testes locais de envio/sincronização. As chamadas Microsoft são simuladas nos testes; câmera, confirmação de e-mail e OneDrive devem ser validados em dispositivos reais antes de ampliar o uso.
+
 ## Desenvolvimento
 
 1. Execute `npm install`.
