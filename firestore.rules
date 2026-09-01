@@ -177,7 +177,7 @@ service cloud.firestore {
       allow create: if validCompanyWrite(request.resource.data);
       allow read: if sameCompany(resource.data) || legacyOwned(resource.data);
       allow update: if isLegacyMigration();
-      allow delete: if false;
+      allow delete: if sameCompany(resource.data) && (isCompanyAdmin() || isSuperAdmin());
     }
 
     match /errorLogs/{itemId} {
