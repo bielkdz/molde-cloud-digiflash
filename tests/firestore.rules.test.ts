@@ -9,12 +9,14 @@ import {
   addDoc,
   collection,
   doc,
+  deleteDoc,
+  writeBatch,
   getDoc,
   serverTimestamp,
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 
 let environment: RulesTestEnvironment;
 
@@ -249,5 +251,67 @@ describe("registro técnico seguro", () => {
     await assertFails(
       updateDoc(doc(userDb, "errorLogs", logId), { code: "alterado" }),
     );
+  });
+});
+
+describe("limpeza do histórico", () => {
+  async function fixture(id: string, role: string, companyStatus = "active") {
+    await environment.withSecurityRulesDisabled(async context => {
+      const db = context.firestore();
+      await setDoc(doc(db, "companies", id), { status: companyStatus });
+      await setDoc(doc(db, "users", id), { role, companyId: id });
+      await setDoc(doc(db, "history", id), { companyId: id, userId: id, title: "Atividade" });
+      await setDoc(doc(db, "history", id + "-foreign"), { companyId: "company-b", userId: "user-b" });
+    });
+    return environment.authenticatedContext(id).firestore();
+  }
+
+  it.each(["admin", "superadmin"])("permite %s limpar somente a empresa atual", async role => {
+    const id = "cleanup-" + role;
+    const db = await fixture(id, role);
+    await assertFails(deleteDoc(doc(db, "history", id + "-foreign")));
+    await assertSucceeds(deleteDoc(doc(db, "history", id)));
+    const snapshot = await assertSucceeds(getDoc(doc(db, "history", id)));
+    expect(snapshot.exists()).toBe(false);
+  });
+
+  it.each(["user", "pending", "blocked"])("nega limpeza ao perfil %s", async role => {
+    const id = "cleanup-denied-" + role;
+    const db = await fixture(id, role);
+    await assertFails(deleteDoc(doc(db, "history", id)));
+  });
+
+  it("nega limpeza sem autenticação", async () => {
+    await fixture("cleanup-anonymous", "admin");
+    const db = environment.unauthenticatedContext().firestore();
+    await assertFails(deleteDoc(doc(db, "history", "cleanup-anonymous")));
+  });
+
+  it.each(["blocked", "deleted"])("nega administrador de empresa %s", async status => {
+    const id = "cleanup-company-" + status;
+    const db = await fixture(id, "admin", status);
+    await assertFails(deleteDoc(doc(db, "history", id)));
+  });
+
+  it("rejeita lote misto e preserva o registro autorizado", async () => {
+    const id = "cleanup-batch";
+    const db = await fixture(id, "admin");
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "history", id));
+    batch.delete(doc(db, "history", id + "-foreign"));
+    await assertFails(batch.commit());
+    expect((await getDoc(doc(db, "history", id))).exists()).toBe(true);
+  });
+
+  it("limpar histórico não remove fotos nem pastas", async () => {
+    const id = "cleanup-preserves";
+    const db = await fixture(id, "admin");
+    await environment.withSecurityRulesDisabled(async context => {
+      await setDoc(doc(context.firestore(), "files", id), { companyId: id, userId: id, name: "Foto" });
+      await setDoc(doc(context.firestore(), "folders", id), { companyId: id, userId: id, name: "Pasta" });
+    });
+    await assertSucceeds(deleteDoc(doc(db, "history", id)));
+    expect((await getDoc(doc(db, "files", id))).exists()).toBe(true);
+    expect((await getDoc(doc(db, "folders", id))).exists()).toBe(true);
   });
 });
