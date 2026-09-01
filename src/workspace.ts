@@ -559,21 +559,21 @@ export async function synchronizeWorkspace(
       updated += 1;
     }
   });
-  missingFiles.forEach((item) => batch.delete(doc(db, "files", item.id)));
-  missingFolders.forEach((item) => batch.delete(doc(db, "folders", item.id)));
+  // Absence is not proof of deletion: the administrator may have switched
+  // drives or moved an item outside our scan. Preserve these records always.
   batch.set(doc(collection(db, "history")), {
     companyId: actor.companyId,
     userId: actor.userId,
     actorName: actor.name,
     action: "workspace_synced",
     title: "OneDrive sincronizado",
-    detail: `${missingFolders.length} pasta(s) e ${missingFiles.length} arquivo(s) removido(s); ${updated} registro(s) atualizado(s) · ${actor.name}`,
+    detail: `${missingFolders.length} pasta(s) e ${missingFiles.length} arquivo(s) não localizado(s), preservados; ${updated} registro(s) atualizado(s) · ${actor.name}`,
     createdAt: serverTimestamp(),
   });
   await batch.commit();
   return {
-    removedFolders: missingFolders.length,
-    removedFiles: missingFiles.length,
+    missingFolders: missingFolders.length,
+    missingFiles: missingFiles.length,
     updated,
   };
 }

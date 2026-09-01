@@ -93,16 +93,8 @@ export async function createCompany(name: string, adminEmail: string, createdBy:
     });
   });
 
-  const registeredUsers = await getDocs(query(collection(db, "users"), where("email", "==", normalizedEmail)));
-  await Promise.all(registeredUsers.docs.map(async (userSnapshot) => {
-    await updateDoc(userSnapshot.ref, {
-      companyId: companyRef.id,
-      role: "admin",
-      approvedBy: createdBy,
-      approvedAt: serverTimestamp(),
-    });
-    await updateDoc(invitationRef, { claimedBy: userSnapshot.id, claimedAt: serverTimestamp() });
-  }));
+  // Never promote an account found by an editable profile email. The invited
+  // person signs in, claims the invitation, and receives explicit approval.
 }
 
 export async function createCompanyForPendingUser(uid: string, name: string, email: string, createdBy: string) {
@@ -115,10 +107,19 @@ export async function createCompanyForPendingUser(uid: string, name: string, ema
   const invitationRef = doc(db, "companyInvites", normalizedEmail);
 
   await runTransaction(db, async (transaction) => {
-    const userSnapshot = await transaction.get(userRef);
+    const [userSnapshot, identity, invitation] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(doc(db, "verifiedIdentities", uid)),
+      transaction.get(invitationRef),
+    ]);
     if (!userSnapshot.exists() || userSnapshot.data().role !== "pending") {
       throw new Error("Este cadastro não está mais aguardando autorização.");
     }
+    if (!identity.exists() || identity.data().email !== userSnapshot.data().email
+      || String(identity.data().email).toLowerCase() !== normalizedEmail) {
+      throw new Error("O usuário precisa confirmar o e-mail e entrar novamente antes de administrar uma empresa.");
+    }
+    if (invitation.exists()) throw new Error("Este e-mail já possui um convite. Utilize a empresa vinculada.");
 
     transaction.set(companyRef, {
       name: cleanName,
