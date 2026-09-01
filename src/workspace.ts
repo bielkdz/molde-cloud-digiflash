@@ -577,3 +577,26 @@ export async function synchronizeWorkspace(
     updated,
   };
 }
+
+/** Deletes only the explicitly confirmed history snapshot, in bounded batches. */
+export async function deleteHistoryRecords(companyId: string, items: HistoryRecord[]) {
+  if (!companyId || items.some(item => item.companyId !== companyId || !item.id || item.id.includes("/"))) {
+    throw new Error("A limpeza deve ser limitada ao histórico da empresa atual.");
+  }
+  const ids = [...new Set(items.map(item => item.id))];
+  let deleted = 0;
+  try {
+    for (let offset = 0; offset < ids.length; offset += 400) {
+      const chunk = ids.slice(offset, offset + 400);
+      const batch = writeBatch(db);
+      for (const id of chunk) batch.delete(doc(db, "history", id));
+      await batch.commit();
+      deleted += chunk.length;
+    }
+    return deleted;
+  } catch {
+    throw new Error(
+      `Limpeza interrompida. ${deleted} registro(s) do lote confirmado já foram removidos. Confira sua conexão e permissão antes de tentar novamente.`,
+    );
+  }
+}

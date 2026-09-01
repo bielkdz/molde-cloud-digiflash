@@ -57,6 +57,7 @@ import {
 } from "./onedrive";
 import {
   createFolder,
+  deleteHistoryRecords,
   linkFolderToOneDrive,
   migrateLegacyWorkspace,
   moveFileRecord,
@@ -2422,7 +2423,7 @@ function DashboardApp({
             )}
           </>
         )}
-        {screen === "history" && <HistoryList items={history} />}
+        {screen === "history" && <HistoryList key={profile.companyId} items={history} companyId={profile.companyId} canClear={managerAccess} online={online} />}
         {screen === "search" && (
           <>
             <div className="search-box">
@@ -3626,41 +3627,87 @@ function CompanySettings({
   );
 }
 
-function HistoryList({ items }: { items: HistoryRecord[] }) {
+function HistoryList({ items, companyId, canClear, online }: {
+  items: HistoryRecord[]; companyId: string; canClear: boolean; online: boolean;
+}) {
+  const dialog = useDialog();
+  const [visibleCount, setVisibleCount] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const clearing = useRef(false);
+  const companyItems = items.filter(item => item.companyId === companyId);
+  const visibleItems = companyItems.slice(0, visibleCount);
+
+  async function clearHistory(scope: "old" | "all") {
+    if (!canClear || !online || clearing.current) return;
+    clearing.current = true;
+    setBusy(true);
+    setMessage("");
+    try {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      // Freeze the confirmed IDs: events created during confirmation are preserved.
+      const selected = companyItems.filter(item => scope === "all" ||
+        (item.createdAt && item.createdAt.toMillis() < cutoff));
+      if (!selected.length) {
+        setMessage(scope === "old" ? "Não há atividades com mais de 30 dias." : "O histórico já está vazio.");
+        return;
+      }
+      const confirmation = await dialog.prompt({
+        title: scope === "old" ? "Limpar atividades antigas?" : "Limpar todo o histórico?",
+        message: `Serão excluídos definitivamente ${selected.length} registro(s) da empresa atual${scope === "old" ? " com mais de 30 dias" : ""}. Fotos, pastas e arquivos do OneDrive não serão apagados. Relatórios de uso e última sincronização deixarão de considerar esses registros. Esta ação não pode ser desfeita. Digite LIMPAR para confirmar.`,
+        placeholder: "LIMPAR",
+        confirmText: "Apagar registros",
+        danger: true,
+      });
+      if (confirmation !== "LIMPAR") return;
+      const count = await deleteHistoryRecords(companyId, selected);
+      setVisibleCount(30);
+      setMessage(`${count} registro(s) do lote confirmado removido(s). Fotos e pastas foram preservadas.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Não foi possível limpar o histórico.");
+    } finally {
+      clearing.current = false;
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="panel list-panel">
       <div className="panel-title">
-        <div>
-          <small>ATIVIDADE</small>
-          <h3>Histórico real</h3>
-        </div>
+        <div><small>ATIVIDADE</small><h3>Histórico de atividades</h3></div>
       </div>
-      {items.length ? (
-        items.map((item) => (
-          <div className="history-row" key={item.id}>
-            <span className="file-icon">
-              <Icon
-                name={
-                  item.action === "photo_registered" ||
-                  item.action === "photo_uploaded"
-                    ? "image"
-                    : "folder"
-                }
-              />
-            </span>
-            <div>
-              <strong>{item.title}</strong>
-              <small>{item.detail}</small>
-            </div>
-            <time>{formatDate(item.createdAt?.toDate())}</time>
+      {canClear && (
+        <details style={{ marginBottom: 16 }}>
+          <summary style={{ cursor: "pointer", padding: "12px 0" }}>Limpar histórico</summary>
+          <p style={{ color: "#aab2b6", fontSize: 13, lineHeight: 1.5 }}>
+            Remove somente atividades. A limpeza é definitiva e também afeta os relatórios de uso e a indicação da última sincronização.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <button className="outline" style={{ minHeight: 44 }} disabled={busy || !online || !companyItems.length}
+              onClick={() => void clearHistory("old")}>Limpar registros com mais de 30 dias</button>
+            <button className="danger-action" style={{ minHeight: 44 }} disabled={busy || !online || !companyItems.length}
+              onClick={() => void clearHistory("all")}>Limpar todo o histórico</button>
           </div>
-        ))
-      ) : (
-        <EmptyState
-          icon="clock"
-          title="Nenhuma atividade registrada"
-          detail="As ações da equipe aparecerão aqui automaticamente."
-        />
+          {!online && <p>Conecte-se à internet para limpar o histórico.</p>}
+        </details>
+      )}
+      <p role="status" aria-live="polite">{busy ? "Aguardando confirmação ou concluindo limpeza..." : message}</p>
+      <p style={{ color: "#aab2b6", fontSize: 13 }}>
+        Mostrando {visibleItems.length} de {companyItems.length} atividade(s)
+      </p>
+      {visibleItems.length ? visibleItems.map(item => (
+        <div className="history-row" key={item.id}>
+          <span className="file-icon"><Icon name={item.action === "photo_registered" || item.action === "photo_uploaded" ? "image" : "folder"} /></span>
+          <div><strong>{item.title}</strong><small>{item.detail}</small></div>
+          <time>{formatDate(item.createdAt?.toDate())}</time>
+        </div>
+      )) : (
+        <EmptyState icon="clock" title="Nenhuma atividade registrada"
+          detail="As novas ações da equipe aparecerão aqui automaticamente." />
+      )}
+      {companyItems.length > visibleCount && (
+        <button className="outline" style={{ minHeight: 44, marginTop: 16, width: "100%" }}
+          onClick={() => setVisibleCount(count => count + 30)}>Carregar mais 30 atividades</button>
       )}
     </section>
   );
