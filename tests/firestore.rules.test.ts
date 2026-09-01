@@ -12,6 +12,9 @@ import {
   deleteDoc,
   writeBatch,
   getDoc,
+  getDocs,
+  query,
+  where,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -271,8 +274,8 @@ describe("limpeza do histórico", () => {
     const db = await fixture(id, role);
     await assertFails(deleteDoc(doc(db, "history", id + "-foreign")));
     await assertSucceeds(deleteDoc(doc(db, "history", id)));
-    const snapshot = await assertSucceeds(getDoc(doc(db, "history", id)));
-    expect(snapshot.exists()).toBe(false);
+    const snapshot = await assertSucceeds(getDocs(query(collection(db, "history"), where("companyId", "==", id))));
+    expect(snapshot.empty).toBe(true);
   });
 
   it.each(["user", "pending", "blocked"])("nega limpeza ao perfil %s", async role => {
