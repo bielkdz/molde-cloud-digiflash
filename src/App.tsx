@@ -127,11 +127,46 @@ type DemoStep = {
   detail: string;
 };
 const demoSteps: DemoStep[] = [
-  { screen: "dashboard", icon: "home", eyebrow: "VISÃO GERAL", title: "Apresente o problema e a solução", detail: "O Molde Cloud leva a fotografia original do quadro DigiFlash, feita no celular, até o OneDrive acessível no computador." },
-  { screen: "files", icon: "folder", eyebrow: "ETAPA 1", title: "Organize o trabalho em uma pasta", detail: "Crie ou escolha uma pasta com o nome do projeto. Nada é criado automaticamente durante esta demonstração." },
-  { screen: "capture", icon: "camera", eyebrow: "ETAPA 2", title: "Fotografe e confira a imagem", detail: "Abra a câmera, confira a fotografia e informe a pasta e o nome do arquivo antes do envio." },
-  { screen: "capture", icon: "cloud", eyebrow: "ETAPA 3", title: "Envie o original ao OneDrive", detail: "Mostre o progresso em onda e explique que a fotografia original é enviada com segurança para o OneDrive da empresa." },
-  { screen: "search", icon: "search", eyebrow: "RESULTADO", title: "Localize no celular e abra no computador", detail: "Pesquise pelo nome, confirme o histórico e finalize mostrando o mesmo arquivo sincronizado na pasta do OneDrive no computador." },
+  {
+    screen: "dashboard",
+    icon: "home",
+    eyebrow: "VISÃO GERAL",
+    title: "Apresente o problema e a solução",
+    detail:
+      "O Molde Cloud leva a fotografia original do quadro DigiFlash, feita no celular, até o OneDrive acessível no computador.",
+  },
+  {
+    screen: "files",
+    icon: "folder",
+    eyebrow: "ETAPA 1",
+    title: "Organize o trabalho em uma pasta",
+    detail:
+      "Crie ou escolha uma pasta com o nome do projeto. Nada é criado automaticamente durante esta demonstração.",
+  },
+  {
+    screen: "capture",
+    icon: "camera",
+    eyebrow: "ETAPA 2",
+    title: "Fotografe e confira a imagem",
+    detail:
+      "Abra a câmera, confira a fotografia e informe a pasta e o nome do arquivo antes do envio.",
+  },
+  {
+    screen: "capture",
+    icon: "cloud",
+    eyebrow: "ETAPA 3",
+    title: "Envie o original ao OneDrive",
+    detail:
+      "Mostre o progresso em onda e explique que a fotografia original é enviada com segurança para o OneDrive da empresa.",
+  },
+  {
+    screen: "search",
+    icon: "search",
+    eyebrow: "RESULTADO",
+    title: "Localize no celular e abra no computador",
+    detail:
+      "Pesquise pelo nome, confirme o histórico e finalize mostrando o mesmo arquivo sincronizado na pasta do OneDrive no computador.",
+  },
 ];
 const nav = [
   { id: "dashboard" as Screen, label: "Início", icon: "home" },
@@ -153,7 +188,7 @@ export default function App() {
     let active = true,
       splashTimer = window.setTimeout(() => {
         if (active) setSplashVisible(false);
-      }, 1800);
+      }, 1600);
     unsubscribeAuth = onAuthStateChanged(auth, (current) => {
       unsubscribeProfile();
       setUser(current);
@@ -166,7 +201,7 @@ export default function App() {
       setSplashVisible(true);
       splashTimer = window.setTimeout(() => {
         if (active) setSplashVisible(false);
-      }, 2400);
+      }, 1600);
       setLoading(false);
       unsubscribeProfile = watchUserProfile(current.uid, (nextProfile) => {
         if (active) setProfile(nextProfile);
@@ -192,11 +227,15 @@ export default function App() {
   if (loading || splashVisible)
     return (
       <div className="auth-screen auth-loading-screen">
-        <div className="auth-card auth-loading-card">
-          <span className="brand-mark">M</span>
-          <h1>Molde Cloud</h1>
+        <div className="entry-splash" role="status" aria-live="polite">
+          <img
+            className="entry-splash-logo"
+            src="/molde-cloud-logo.svg"
+            alt="Molde Cloud DigiFlash"
+          />
           <p>Preparando seu acesso...</p>
           <div className="auth-loader" />
+          <div className="entry-splash-wave" aria-hidden="true" />
         </div>
       </div>
     );
@@ -240,6 +279,7 @@ function AuthScreen({
     [name, setName] = useState(""),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
+    [showPassword, setShowPassword] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   async function submit(event: React.FormEvent) {
@@ -268,7 +308,7 @@ function AuthScreen({
           : code === "auth/weak-password"
             ? "Use uma senha com pelo menos 6 caracteres."
             : code === "auth/operation-not-allowed"
-              ? "O login por e-mail ainda precisa ser ativado no Firebase."
+              ? "O acesso por e-mail está temporariamente indisponível."
               : "E-mail ou senha inválidos.",
       );
     } finally {
@@ -292,102 +332,148 @@ function AuthScreen({
     }
   }
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
-        <span className="brand-mark">M</span>
-        <small>DIGIFLASH</small>
-        <h1>Molde Cloud</h1>
-        <p>
-          {mode === "login"
-            ? "Entre para acessar suas fotografias, pastas e histórico."
-            : "Crie sua conta. O administrador aprovará seu acesso."}
-        </p>
-        <div className="auth-tabs">
-          <button
-            className={mode === "login" ? "active" : ""}
-            onClick={() => setMode("login")}
-          >
-            Entrar
-          </button>
-          <button
-            className={mode === "register" ? "active" : ""}
-            onClick={() => setMode("register")}
-          >
-            Criar conta
-          </button>
+    <div className="auth-screen auth-split-screen">
+      <section className="auth-welcome" aria-label="Molde Cloud">
+        <img
+          className="auth-brand-logo"
+          src="/molde-cloud-logo.svg"
+          alt="Molde Cloud DigiFlash"
+        />
+        <div className="auth-welcome-copy">
+          <h1>
+            Seus moldes, <em>sempre organizados.</em>
+          </h1>
+          <p>Fotografe pelo celular e acesse pelo computador.</p>
         </div>
-        {error && <div className="auth-error">{error}</div>}
-        {message && <div className="auth-success">{message}</div>}
-        <form className="email-form" onSubmit={submit}>
-          {mode === "register" && (
+        <div className="auth-welcome-wave" aria-hidden="true" />
+      </section>
+      <section className="auth-form-panel">
+        <div className="auth-card">
+          <h2>{mode === "login" ? "Acesse sua conta" : "Crie sua conta"}</h2>
+          <p>
+            {mode === "login"
+              ? "Entre para acessar suas fotografias, pastas e histórico."
+              : "Crie sua conta. O administrador aprovará seu acesso."}
+          </p>
+          <div className="auth-tabs">
+            <button
+              type="button"
+              className={mode === "login" ? "active" : ""}
+              aria-pressed={mode === "login"}
+              onClick={() => {
+                setMode("login");
+                setShowPassword(false);
+              }}
+            >
+              Entrar
+            </button>
+            <button
+              type="button"
+              className={mode === "register" ? "active" : ""}
+              aria-pressed={mode === "register"}
+              onClick={() => {
+                setMode("register");
+                setShowPassword(false);
+              }}
+            >
+              Criar conta
+            </button>
+          </div>
+          {error && <div className="auth-error">{error}</div>}
+          {message && <div className="auth-success">{message}</div>}
+          <form className="email-form" onSubmit={submit}>
+            {mode === "register" && (
+              <label>
+                Nome
+                <input
+                  required
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  autoComplete="name"
+                />
+              </label>
+            )}
             <label>
-              Nome
+              E-mail
               <input
                 required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                autoComplete="name"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
               />
             </label>
+            <label className="password-field">
+              Senha
+              <span>
+                <input
+                  required
+                  minLength={6}
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={
+                    mode === "login" ? "current-password" : "new-password"
+                  }
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </span>
+              {mode === "register" && (
+                <small className="password-hint">
+                  Use pelo menos 6 caracteres.
+                </small>
+              )}
+            </label>
+            <button
+              type="submit"
+              className="primary auth-submit"
+              disabled={busy}
+            >
+              {busy
+                ? "Aguarde..."
+                : mode === "login"
+                  ? "Entrar com e-mail"
+                  : "Criar minha conta"}
+            </button>
+          </form>
+          {mode === "login" && (
+            <button
+              type="button"
+              className="forgot-password"
+              disabled={busy}
+              onClick={resetPassword}
+            >
+              Esqueci minha senha
+            </button>
           )}
-          <label>
-            E-mail
-            <input
-              required
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
-            />
-          </label>
-          <label>
-            Senha
-            <input
-              required
-              minLength={6}
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
-            />
-          </label>
-          <button className="primary auth-submit" disabled={busy}>
-            {busy
-              ? "Aguarde..."
-              : mode === "login"
-                ? "Entrar com e-mail"
-                : "Criar minha conta"}
-          </button>
-        </form>
-        {mode === "login" && (
+          <div className="auth-divider">
+            <span>ou</span>
+          </div>
           <button
-            className="forgot-password"
-            disabled={busy}
-            onClick={resetPassword}
+            type="button"
+            className="google-login"
+            onClick={() => {
+              setError("");
+              void signInWithPopup(auth, googleProvider).catch(() =>
+                setError("Não foi possível abrir o login do Google."),
+              );
+            }}
           >
-            Esqueci minha senha
+            <b>G</b> Entrar com Google
           </button>
-        )}
-        <div className="auth-divider">
-          <span>ou</span>
+          <span className="auth-note">
+            Sua sessão permanecerá salva neste aparelho.
+          </span>
         </div>
-        <button
-          className="google-login"
-          onClick={() => {
-            setError("");
-            void signInWithPopup(auth, googleProvider).catch(() =>
-              setError("Não foi possível abrir o login do Google."),
-            );
-          }}
-        >
-          <b>G</b> Entrar com Google
-        </button>
-        <span className="auth-note">
-          Sua sessão permanecerá salva neste aparelho.
-        </span>
-      </div>
+      </section>
     </div>
   );
 }
@@ -414,16 +500,24 @@ function AccessScreen({
         await user.getIdToken(true);
         await ensureUserProfile(user);
         setEmailVerified(user.emailVerified);
-        setVerificationMessage(user.emailVerified
-          ? "E-mail confirmado. O administrador já pode aprovar seu acesso."
-          : "Abra o link enviado ao seu e-mail e tente novamente.");
+        setVerificationMessage(
+          user.emailVerified
+            ? "E-mail confirmado. O administrador já pode aprovar seu acesso."
+            : "Abra o link enviado ao seu e-mail e tente novamente.",
+        );
       } else {
         await sendEmailVerification(user);
-        setVerificationMessage("Link enviado. Confira sua caixa de entrada e spam.");
+        setVerificationMessage(
+          "Link enviado. Confira sua caixa de entrada e spam.",
+        );
       }
     } catch {
-      setVerificationMessage("Não foi possível confirmar agora. Aguarde um pouco e tente novamente.");
-    } finally { setVerificationBusy(false); }
+      setVerificationMessage(
+        "Não foi possível confirmar agora. Aguarde um pouco e tente novamente.",
+      );
+    } finally {
+      setVerificationBusy(false);
+    }
   }
   return (
     <div className="auth-screen">
@@ -433,11 +527,28 @@ function AccessScreen({
         <h2>{title}</h2>
         <p>{message}</p>
         <strong>{user.email}</strong>
-        {verifyEmail && !emailVerified && <>
-          <p>Para receber acesso de administrador, confirme seu e-mail primeiro.</p>
-          <button className="outline full" disabled={verificationBusy} onClick={() => void verify(false)}>Enviar confirmação de e-mail</button>
-          <button className="outline full" disabled={verificationBusy} onClick={() => void verify(true)}>Já confirmei meu e-mail</button>
-        </>}
+        {verifyEmail && !emailVerified && (
+          <>
+            <p>
+              Para receber acesso de administrador, confirme seu e-mail
+              primeiro.
+            </p>
+            <button
+              className="outline full"
+              disabled={verificationBusy}
+              onClick={() => void verify(false)}
+            >
+              Enviar confirmação de e-mail
+            </button>
+            <button
+              className="outline full"
+              disabled={verificationBusy}
+              onClick={() => void verify(true)}
+            >
+              Já confirmei meu e-mail
+            </button>
+          </>
+        )}
         {verificationMessage && <p role="status">{verificationMessage}</p>}
         <button className="outline full" onClick={() => signOut(auth)}>
           Sair da conta
@@ -518,7 +629,9 @@ function DashboardApp({
     [folderTrashOpen, setFolderTrashOpen] = useState(false),
     [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [adminNavOpen, setAdminNavOpen] = useState(false);
-  const [demoMode, setDemoMode] = useState<"commercial" | "guide">("commercial");
+  const [demoMode, setDemoMode] = useState<"commercial" | "guide">(
+    "commercial",
+  );
   const [demoPaused, setDemoPaused] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false),
     [demoStep, setDemoStep] = useState(0);
@@ -543,7 +656,11 @@ function DashboardApp({
   const adminNav =
     profile.role === "superadmin"
       ? [
-          { id: "settings" as Screen, label: "Configurações", icon: "building" },
+          {
+            id: "settings" as Screen,
+            label: "Configurações",
+            icon: "building",
+          },
           { id: "report" as Screen, label: "Relatório", icon: "chart" },
           { id: "errors" as Screen, label: "Erros", icon: "alert" },
           { id: "users" as Screen, label: "Usuários", icon: "users" },
@@ -551,7 +668,11 @@ function DashboardApp({
         ]
       : profile.role === "admin"
         ? [
-            { id: "settings" as Screen, label: "Configurações", icon: "building" },
+            {
+              id: "settings" as Screen,
+              label: "Configurações",
+              icon: "building",
+            },
             { id: "report" as Screen, label: "Relatório", icon: "chart" },
             { id: "errors" as Screen, label: "Erros", icon: "alert" },
             { id: "users" as Screen, label: "Usuários", icon: "users" },
@@ -1276,9 +1397,18 @@ function DashboardApp({
     setMessage("Comparando pastas e arquivos com o OneDrive...");
     try {
       const account = await getOneDriveAccount();
-      if (!account || !await verifyCompanyOneDrive(profile.companyId, profile.role, account.username)) {
+      if (
+        !account ||
+        !(await verifyCompanyOneDrive(
+          profile.companyId,
+          profile.role,
+          account.username,
+        ))
+      ) {
         setOneDriveAccount("");
-        setMessage("A conta conectada não corresponde ao OneDrive oficial. Reconecte antes de sincronizar.");
+        setMessage(
+          "A conta conectada não corresponde ao OneDrive oficial. Reconecte antes de sincronizar.",
+        );
         return;
       }
       const snapshot = await readOneDriveSnapshot();
@@ -1385,7 +1515,8 @@ function DashboardApp({
       setOneDriveStorage(storage);
       setConnectionTest({
         status: "success",
-        message: "Conexão confirmada. O Molde Cloud consegue acessar o OneDrive.",
+        message:
+          "Conexão confirmada. O Molde Cloud consegue acessar o OneDrive.",
         testedAt,
       });
     } catch (error) {
@@ -2466,7 +2597,15 @@ function DashboardApp({
             )}
           </>
         )}
-        {screen === "history" && <HistoryList key={profile.companyId} items={history} companyId={profile.companyId} canClear={managerAccess} online={online} />}
+        {screen === "history" && (
+          <HistoryList
+            key={profile.companyId}
+            items={history}
+            companyId={profile.companyId}
+            canClear={managerAccess}
+            online={online}
+          />
+        )}
         {screen === "search" && (
           <>
             <div className="search-box">
@@ -2550,10 +2689,25 @@ function DashboardApp({
         onChange={(e) => choosePhoto(e.target.files?.[0])}
       />
       {demoPaused && managerAccess && (
-        <div className="commercial-resume" role="region" aria-label="Apresentação pausada">
+        <div
+          className="commercial-resume"
+          role="region"
+          aria-label="Apresentação pausada"
+        >
           <span>Apresentação pausada · ações nesta tela são reais</span>
-          <button className="outline" disabled={busy} onClick={() => { setDemoPaused(false); setDemoOpen(true); }}>Retomar apresentação</button>
-          <button className="outline" onClick={() => setDemoPaused(false)}>Encerrar</button>
+          <button
+            className="outline"
+            disabled={busy}
+            onClick={() => {
+              setDemoPaused(false);
+              setDemoOpen(true);
+            }}
+          >
+            Retomar apresentação
+          </button>
+          <button className="outline" onClick={() => setDemoPaused(false)}>
+            Encerrar
+          </button>
         </div>
       )}
       {demoOpen && managerAccess && demoMode === "commercial" && (
@@ -2561,9 +2715,16 @@ function DashboardApp({
           step={demoStep}
           onPrevious={() => changeDemoStep(demoStep - 1)}
           onNext={() => changeDemoStep(demoStep + 1)}
-          onClose={() => { setDemoOpen(false); setDemoPaused(false); }}
+          onClose={() => {
+            setDemoOpen(false);
+            setDemoPaused(false);
+          }}
           onScreen={showPresentationScreen}
-          onGuide={() => { setDemoMode("guide"); setDemoStep(0); navigateTo("dashboard"); }}
+          onGuide={() => {
+            setDemoMode("guide");
+            setDemoStep(0);
+            navigateTo("dashboard");
+          }}
         />
       )}
       {demoOpen && managerAccess && demoMode === "guide" && (
@@ -3019,7 +3180,9 @@ function SystemHealth({
           <div>
             <small>SAÚDE DO SISTEMA</small>
             <strong>
-              {requiresAttention ? "Existe algo para verificar" : "Tudo funcionando"}
+              {requiresAttention
+                ? "Existe algo para verificar"
+                : "Tudo funcionando"}
             </strong>
           </div>
         </div>
@@ -3323,105 +3486,225 @@ function Capture(p: CaptureProps) {
 function DemoVisual({ step }: { step: number }) {
   if (step === 0)
     return (
-      <div className="demo-visual demo-visual-flow" aria-label="Fluxo do celular para o computador">
-        <div><Icon name="camera" /><small>CELULAR</small></div>
+      <div
+        className="demo-visual demo-visual-flow"
+        aria-label="Fluxo do celular para o computador"
+      >
+        <div>
+          <Icon name="camera" />
+          <small>CELULAR</small>
+        </div>
         <span>→</span>
-        <div><Icon name="cloud" /><small>ONEDRIVE</small></div>
+        <div>
+          <Icon name="cloud" />
+          <small>ONEDRIVE</small>
+        </div>
         <span>→</span>
-        <div><Icon name="desktop" /><small>COMPUTADOR</small></div>
+        <div>
+          <Icon name="desktop" />
+          <small>COMPUTADOR</small>
+        </div>
       </div>
     );
   if (step === 1)
     return (
-      <div className="demo-visual demo-visual-folder" aria-label="Organização das fotografias em pastas">
-        <div className="demo-folder-main"><Icon name="folder" /><strong>Projeto</strong></div>
+      <div
+        className="demo-visual demo-visual-folder"
+        aria-label="Organização das fotografias em pastas"
+      >
+        <div className="demo-folder-main">
+          <Icon name="folder" />
+          <strong>Projeto</strong>
+        </div>
         <div className="demo-folder-files">
-          <span><Icon name="image" /> Frente</span>
-          <span><Icon name="image" /> Costas</span>
-          <span><Icon name="image" /> Detalhes</span>
+          <span>
+            <Icon name="image" /> Frente
+          </span>
+          <span>
+            <Icon name="image" /> Costas
+          </span>
+          <span>
+            <Icon name="image" /> Detalhes
+          </span>
         </div>
       </div>
     );
   if (step === 2)
     return (
-      <div className="demo-visual demo-visual-camera" aria-label="Captura da fotografia pelo celular">
+      <div
+        className="demo-visual demo-visual-camera"
+        aria-label="Captura da fotografia pelo celular"
+      >
         <div className="demo-phone">
-          <span className="demo-phone-camera"><Icon name="camera" /></span>
-          <i /><i /><i /><i />
+          <span className="demo-phone-camera">
+            <Icon name="camera" />
+          </span>
+          <i />
+          <i />
+          <i />
+          <i />
         </div>
-        <div><strong>Fotografe</strong><small>Confira antes de enviar</small></div>
+        <div>
+          <strong>Fotografe</strong>
+          <small>Confira antes de enviar</small>
+        </div>
       </div>
     );
   if (step === 3)
     return (
-      <div className="demo-visual demo-visual-upload" aria-label="Envio seguro ao OneDrive">
-        <div className="demo-upload-file"><Icon name="image" /></div>
-        <div className="demo-upload-route"><i /><i /><i /></div>
-        <div className="demo-upload-cloud"><Icon name="cloud" /><strong>OneDrive</strong></div>
-        <div className="demo-upload-progress"><span /><b>Enviando com segurança</b></div>
+      <div
+        className="demo-visual demo-visual-upload"
+        aria-label="Envio seguro ao OneDrive"
+      >
+        <div className="demo-upload-file">
+          <Icon name="image" />
+        </div>
+        <div className="demo-upload-route">
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="demo-upload-cloud">
+          <Icon name="cloud" />
+          <strong>OneDrive</strong>
+        </div>
+        <div className="demo-upload-progress">
+          <span />
+          <b>Enviando com segurança</b>
+        </div>
       </div>
     );
   return (
-    <div className="demo-visual demo-visual-search" aria-label="Arquivo localizado no celular e no computador">
-      <div className="demo-search-box"><Icon name="search" /><span>Molde camisa</span></div>
-      <div className="demo-search-result"><Icon name="image" /><div><strong>Molde camisa</strong><small>Arquivo encontrado</small></div><b>✓</b></div>
+    <div
+      className="demo-visual demo-visual-search"
+      aria-label="Arquivo localizado no celular e no computador"
+    >
+      <div className="demo-search-box">
+        <Icon name="search" />
+        <span>Molde camisa</span>
+      </div>
+      <div className="demo-search-result">
+        <Icon name="image" />
+        <div>
+          <strong>Molde camisa</strong>
+          <small>Arquivo encontrado</small>
+        </div>
+        <b>✓</b>
+      </div>
       <Icon name="desktop" />
     </div>
   );
 }
 
-
 const commercialSteps: {
-  chapter: string; title: string; detail: string;
-  points: string[]; visual: number; screen: Screen; action: string;
+  chapter: string;
+  title: string;
+  detail: string;
+  points: string[];
+  visual: number;
+  screen: Screen;
+  action: string;
 }[] = [
   {
     chapter: "01 / O DESAFIO",
     title: "A foto está pronta. O trabalho ainda não.",
-    detail: "Entre fotografar o molde e abrir a imagem no computador, arquivos podem se perder entre mensagens, transferências e pastas sem padrão.",
-    points: ["Fotos dispersas no celular", "Transferências manuais a cada trabalho", "Tempo gasto procurando o arquivo certo"],
-    visual: 1, screen: "files", action: "Ver organização de arquivos",
+    detail:
+      "Entre fotografar o molde e abrir a imagem no computador, arquivos podem se perder entre mensagens, transferências e pastas sem padrão.",
+    points: [
+      "Fotos dispersas no celular",
+      "Transferências manuais a cada trabalho",
+      "Tempo gasto procurando o arquivo certo",
+    ],
+    visual: 1,
+    screen: "files",
+    action: "Ver organização de arquivos",
   },
   {
     chapter: "02 / A SOLUÇÃO",
     title: "Do quadro ao computador. Um fluxo organizado.",
-    detail: "O Molde Cloud conecta a captura no celular à pasta da empresa no OneDrive. A imagem chega ao lugar onde o trabalho continua.",
-    points: ["Pasta e nome definidos antes do envio", "Fotografia original no OneDrive", "Acesso no PC com o OneDrive configurado"],
-    visual: 0, screen: "dashboard", action: "Conhecer a tela inicial",
+    detail:
+      "O Molde Cloud conecta a captura no celular à pasta da empresa no OneDrive. A imagem chega ao lugar onde o trabalho continua.",
+    points: [
+      "Pasta e nome definidos antes do envio",
+      "Fotografia original no OneDrive",
+      "Acesso no PC com o OneDrive configurado",
+    ],
+    visual: 0,
+    screen: "dashboard",
+    action: "Conhecer a tela inicial",
   },
   {
     chapter: "03 / O PRODUTO",
     title: "Fotografe. Confira. Envie.",
-    detail: "Uma sequência guiada para escolher a imagem, organizar o arquivo e acompanhar o envio — sem depender de conversas para transportar as fotos.",
-    points: ["Conferência antes de enviar", "Progresso visível durante o envio", "Pesquisa e visualização dos arquivos"],
-    visual: 2, screen: "capture", action: "Ver a captura real",
+    detail:
+      "Uma sequência guiada para escolher a imagem, organizar o arquivo e acompanhar o envio — sem depender de conversas para transportar as fotos.",
+    points: [
+      "Conferência antes de enviar",
+      "Progresso visível durante o envio",
+      "Pesquisa e visualização dos arquivos",
+    ],
+    visual: 2,
+    screen: "capture",
+    action: "Ver a captura real",
   },
   {
     chapter: "04 / A EMPRESA",
     title: "Organização também é controle.",
-    detail: "A empresa reúne sua equipe, seus registros e sua conta oficial do OneDrive em um ambiente de trabalho próprio.",
-    points: ["Aprovação e permissões de usuários", "Histórico de atividades", "Configurações e teste da conexão"],
-    visual: 3, screen: "settings", action: "Ver configurações reais",
+    detail:
+      "A empresa reúne sua equipe, seus registros e sua conta oficial do OneDrive em um ambiente de trabalho próprio.",
+    points: [
+      "Aprovação e permissões de usuários",
+      "Histórico de atividades",
+      "Configurações e teste da conexão",
+    ],
+    visual: 3,
+    screen: "settings",
+    action: "Ver configurações reais",
   },
   {
     chapter: "05 / EXPERIÊNCIA REAL",
     title: "Um piloto dentro da rotina.",
-    detail: "O sistema já está em uso individual em uma empresa. O retorno inicial relatado é positivo, com acompanhamento contínuo da operação.",
-    points: ["Uso real, não apenas uma ideia", "Ajustes a partir da experiência no celular", "Ainda sem métricas de economia de tempo"],
-    visual: 4, screen: "history", action: "Ver histórico real",
+    detail:
+      "O sistema já está em uso individual em uma empresa. O retorno inicial relatado é positivo, com acompanhamento contínuo da operação.",
+    points: [
+      "Uso real, não apenas uma ideia",
+      "Ajustes a partir da experiência no celular",
+      "Ainda sem métricas de economia de tempo",
+    ],
+    visual: 4,
+    screen: "history",
+    action: "Ver histórico real",
   },
   {
     chapter: "06 / NA PRÁTICA",
     title: "Veja o arquivo chegar ao computador.",
-    detail: "A demonstração final acompanha um trabalho completo: escolher a pasta, fotografar, enviar e abrir a imagem no computador.",
-    points: ["Internet e OneDrive conectados", "Uma fotografia autorizada para demonstrar", "A mesma conta sincronizada no computador"],
-    visual: 0, screen: "capture", action: "Começar demonstração ao vivo",
+    detail:
+      "A demonstração final acompanha um trabalho completo: escolher a pasta, fotografar, enviar e abrir a imagem no computador.",
+    points: [
+      "Internet e OneDrive conectados",
+      "Uma fotografia autorizada para demonstrar",
+      "A mesma conta sincronizada no computador",
+    ],
+    visual: 0,
+    screen: "capture",
+    action: "Começar demonstração ao vivo",
   },
 ];
 
-function CommercialPresentation({ step, onPrevious, onNext, onClose, onScreen, onGuide }: {
-  step: number; onPrevious: () => void; onNext: () => void;
-  onClose: () => void; onScreen: (screen: Screen) => void; onGuide: () => void;
+function CommercialPresentation({
+  step,
+  onPrevious,
+  onNext,
+  onClose,
+  onScreen,
+  onGuide,
+}: {
+  step: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  onClose: () => void;
+  onScreen: (screen: Screen) => void;
+  onGuide: () => void;
 }) {
   const current = commercialSteps[step];
   const panelRef = useRef<HTMLElement>(null);
@@ -3440,24 +3723,60 @@ function CommercialPresentation({ step, onPrevious, onNext, onClose, onScreen, o
     };
   }, []);
   return (
-    <section ref={panelRef} className="commercial-deck" role="dialog" aria-modal="true"
+    <section
+      ref={panelRef}
+      className="commercial-deck"
+      role="dialog"
+      aria-modal="true"
       aria-label="Apresentação comercial do Molde Cloud"
       onKeyDown={(event) => {
-        if (event.key === "Escape") { event.preventDefault(); onClose(); }
-        if (event.key === "ArrowRight") { event.preventDefault(); onNext(); }
-        if (event.key === "ArrowLeft") { event.preventDefault(); onPrevious(); }
-        if (event.key === "Tab") {
-          const buttons = Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") || []);
-          const first = buttons[0], last = buttons[buttons.length - 1];
-          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
         }
-      }}>
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          onNext();
+        }
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          onPrevious();
+        }
+        if (event.key === "Tab") {
+          const buttons = Array.from(
+            panelRef.current?.querySelectorAll<HTMLButtonElement>(
+              "button:not(:disabled)",
+            ) || [],
+          );
+          const first = buttons[0],
+            last = buttons[buttons.length - 1];
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
+          }
+        }
+      }}
+    >
       <header className="commercial-header">
-        <div><strong>MOLDE CLOUD</strong><span>Do celular ao computador</span></div>
+        <div>
+          <strong>MOLDE CLOUD</strong>
+          <span>Do celular ao computador</span>
+        </div>
         <div className="commercial-header-actions">
-          <button className="outline" onClick={onGuide}>Como usar</button>
-          <button ref={closeRef} className="outline" onClick={onClose} aria-label="Fechar apresentação">Fechar ×</button>
+          <button className="outline" onClick={onGuide}>
+            Como usar
+          </button>
+          <button
+            ref={closeRef}
+            className="outline"
+            onClick={onClose}
+            aria-label="Fechar apresentação"
+          >
+            Fechar ×
+          </button>
         </div>
       </header>
       <div className="commercial-body" key={step}>
@@ -3465,24 +3784,66 @@ function CommercialPresentation({ step, onPrevious, onNext, onClose, onScreen, o
           <small>{current.chapter}</small>
           <h2>{current.title}</h2>
           <p>{current.detail}</p>
-          <ul>{current.points.map(point => <li key={point}>{point}</li>)}</ul>
-          <button className="primary" onClick={() => onScreen(current.screen)}>{current.action} →</button>
-          <span className="commercial-live-note">Abre o sistema real. Dados da empresa poderão aparecer; ações não são simuladas.</span>
+          <ul>
+            {current.points.map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+          <button className="primary" onClick={() => onScreen(current.screen)}>
+            {current.action} →
+          </button>
+          <span className="commercial-live-note">
+            Abre o sistema real. Dados da empresa poderão aparecer; ações não
+            são simuladas.
+          </span>
         </div>
         <div className="commercial-media">
           {step === 3 ? (
-            <div className="commercial-control" role="img" aria-label="Controle da empresa: equipe, histórico e OneDrive">
-              <Icon name="shield" /><strong>Sua empresa no controle</strong>
-              <div><span><Icon name="users" />Equipe</span><span><Icon name="clock" />Histórico</span><span><Icon name="cloud" />OneDrive</span></div>
+            <div
+              className="commercial-control"
+              role="img"
+              aria-label="Controle da empresa: equipe, histórico e OneDrive"
+            >
+              <Icon name="shield" />
+              <strong>Sua empresa no controle</strong>
+              <div>
+                <span>
+                  <Icon name="users" />
+                  Equipe
+                </span>
+                <span>
+                  <Icon name="clock" />
+                  Histórico
+                </span>
+                <span>
+                  <Icon name="cloud" />
+                  OneDrive
+                </span>
+              </div>
             </div>
-          ) : <DemoVisual step={current.visual} />}
-          <p>{step === 4 ? "Experiência inicial relatada pelo responsável pelo piloto." : "Ilustração do fluxo · explore a tela real pelo botão ao lado."}</p>
+          ) : (
+            <DemoVisual step={current.visual} />
+          )}
+          <p>
+            {step === 4
+              ? "Experiência inicial relatada pelo responsável pelo piloto."
+              : "Ilustração do fluxo · explore a tela real pelo botão ao lado."}
+          </p>
         </div>
       </div>
       <footer className="commercial-footer">
-        <button className="outline" disabled={step === 0} onClick={onPrevious}>← Voltar</button>
-        <div className="commercial-page" aria-live="polite"><strong>{step + 1} / {commercialSteps.length}</strong><span>{current.chapter.split(" / ")[1]}</span></div>
-        <button className="primary" onClick={onNext}>{step === commercialSteps.length - 1 ? "Concluir" : "Próximo →"}</button>
+        <button className="outline" disabled={step === 0} onClick={onPrevious}>
+          ← Voltar
+        </button>
+        <div className="commercial-page" aria-live="polite">
+          <strong>
+            {step + 1} / {commercialSteps.length}
+          </strong>
+          <span>{current.chapter.split(" / ")[1]}</span>
+        </div>
+        <button className="primary" onClick={onNext}>
+          {step === commercialSteps.length - 1 ? "Concluir" : "Próximo →"}
+        </button>
       </footer>
     </section>
   );
@@ -3503,25 +3864,56 @@ function DemoTour({
   const last = step === demoSteps.length - 1;
   return (
     <div className="demo-tour-backdrop" role="presentation">
-      <section className="demo-tour" role="dialog" aria-modal="true" aria-label="Como usar o Molde Cloud">
+      <section
+        className="demo-tour"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Como usar o Molde Cloud"
+      >
         <header>
-          <div className="demo-tour-icon"><Icon name={current.icon} /></div>
-          <div><small>{current.eyebrow}</small><strong>Como usar</strong></div>
-          <button className="demo-tour-close" onClick={onClose} aria-label="Encerrar demonstração">×</button>
+          <div className="demo-tour-icon">
+            <Icon name={current.icon} />
+          </div>
+          <div>
+            <small>{current.eyebrow}</small>
+            <strong>Como usar</strong>
+          </div>
+          <button
+            className="demo-tour-close"
+            onClick={onClose}
+            aria-label="Encerrar demonstração"
+          >
+            ×
+          </button>
         </header>
-        <div className="demo-tour-progress" aria-label={`Etapa ${step + 1} de ${demoSteps.length}`}>
-          {demoSteps.map((item, index) => <i key={item.title} className={index <= step ? "active" : ""} />)}
+        <div
+          className="demo-tour-progress"
+          aria-label={`Etapa ${step + 1} de ${demoSteps.length}`}
+        >
+          {demoSteps.map((item, index) => (
+            <i key={item.title} className={index <= step ? "active" : ""} />
+          ))}
         </div>
         <DemoVisual step={step} />
         <div className="demo-tour-copy">
-          <span>Etapa {step + 1} de {demoSteps.length}</span>
+          <span>
+            Etapa {step + 1} de {demoSteps.length}
+          </span>
           <h2>{current.title}</h2>
           <p>{current.detail}</p>
           <em>Este guia não cria, altera nem envia nenhum arquivo.</em>
         </div>
         <footer>
-          <button className="outline" disabled={step === 0} onClick={onPrevious}>Voltar</button>
-          <button className="primary" onClick={onNext}>{last ? "Concluir apresentação" : "Próxima etapa"}</button>
+          <button
+            className="outline"
+            disabled={step === 0}
+            onClick={onPrevious}
+          >
+            Voltar
+          </button>
+          <button className="primary" onClick={onNext}>
+            {last ? "Concluir apresentação" : "Próxima etapa"}
+          </button>
         </footer>
       </section>
     </div>
@@ -3587,8 +3979,9 @@ function CompanySettings({
   onTest: () => void;
   onConnect: () => void;
 }) {
-  const storagePercentage =
-    storage?.total ? Math.min(100, (storage.used / storage.total) * 100) : 0;
+  const storagePercentage = storage?.total
+    ? Math.min(100, (storage.used / storage.total) * 100)
+    : 0;
   const officialAccount = company?.oneDriveAccount || "Ainda não definida";
   const connected = Boolean(oneDriveAccount);
   return (
@@ -3602,16 +3995,46 @@ function CompanySettings({
           <h2>{company?.name || "Empresa"}</h2>
           <p>Visão geral da operação e da conexão usada pelo Molde Cloud.</p>
         </div>
-        <span className={`settings-status ${company?.status === "active" ? "active" : ""}`}>
-          {company?.status === "active" ? "Empresa ativa" : "Atenção necessária"}
+        <span
+          className={`settings-status ${company?.status === "active" ? "active" : ""}`}
+        >
+          {company?.status === "active"
+            ? "Empresa ativa"
+            : "Atenção necessária"}
         </span>
       </div>
 
       <div className="settings-metrics">
-        <article><Icon name="users" /><div><strong>{users.length}</strong><span>Usuários</span></div></article>
-        <article><Icon name="folder" /><div><strong>{folderCount}</strong><span>Pastas</span></div></article>
-        <article><Icon name="image" /><div><strong>{fileCount}</strong><span>Fotografias</span></div></article>
-        <article><Icon name="cloud" /><div><strong>{storage ? `${storagePercentage.toFixed(0)}%` : "—"}</strong><span>OneDrive usado</span></div></article>
+        <article>
+          <Icon name="users" />
+          <div>
+            <strong>{users.length}</strong>
+            <span>Usuários</span>
+          </div>
+        </article>
+        <article>
+          <Icon name="folder" />
+          <div>
+            <strong>{folderCount}</strong>
+            <span>Pastas</span>
+          </div>
+        </article>
+        <article>
+          <Icon name="image" />
+          <div>
+            <strong>{fileCount}</strong>
+            <span>Fotografias</span>
+          </div>
+        </article>
+        <article>
+          <Icon name="cloud" />
+          <div>
+            <strong>
+              {storage ? `${storagePercentage.toFixed(0)}%` : "—"}
+            </strong>
+            <span>OneDrive usado</span>
+          </div>
+        </article>
       </div>
 
       <div className="settings-grid">
@@ -3622,63 +4045,159 @@ function CompanySettings({
               <h3>Conexão da empresa</h3>
             </div>
             <span className={connected ? "connected" : "disconnected"}>
-              <i />{connected ? "Conectado" : "Desconectado"}
+              <i />
+              {connected ? "Conectado" : "Desconectado"}
             </span>
           </div>
           <dl>
-            <div><dt>Conta oficial</dt><dd>{officialAccount}</dd></div>
-            <div><dt>Sessão conectada</dt><dd>{oneDriveAccount || "Nenhuma conta conectada"}</dd></div>
-            <div><dt>Armazenamento</dt><dd>{storage ? `${formatBytes(storage.used)} de ${formatBytes(storage.total)}` : storageLoading ? "Consultando..." : "Teste a conexão para consultar"}</dd></div>
-            <div><dt>Última sincronização</dt><dd>{lastSynchronization ? formatDate(lastSynchronization.createdAt?.toDate()) : "Ainda não realizada"}</dd></div>
+            <div>
+              <dt>Conta oficial</dt>
+              <dd>{officialAccount}</dd>
+            </div>
+            <div>
+              <dt>Sessão conectada</dt>
+              <dd>{oneDriveAccount || "Nenhuma conta conectada"}</dd>
+            </div>
+            <div>
+              <dt>Armazenamento</dt>
+              <dd>
+                {storage
+                  ? `${formatBytes(storage.used)} de ${formatBytes(storage.total)}`
+                  : storageLoading
+                    ? "Consultando..."
+                    : "Teste a conexão para consultar"}
+              </dd>
+            </div>
+            <div>
+              <dt>Última sincronização</dt>
+              <dd>
+                {lastSynchronization
+                  ? formatDate(lastSynchronization.createdAt?.toDate())
+                  : "Ainda não realizada"}
+              </dd>
+            </div>
           </dl>
           {storage && (
-            <div className="settings-storage" aria-label={`${storagePercentage.toFixed(0)}% do armazenamento utilizado`}>
+            <div
+              className="settings-storage"
+              aria-label={`${storagePercentage.toFixed(0)}% do armazenamento utilizado`}
+            >
               <span style={{ width: `${storagePercentage}%` }} />
             </div>
           )}
-          <div className={`connection-result ${connectionTest.status}`} aria-live="polite">
-            <Icon name={connectionTest.status === "success" ? "shield" : connectionTest.status === "error" ? "alert" : "sync"} />
+          <div
+            className={`connection-result ${connectionTest.status}`}
+            aria-live="polite"
+          >
+            <Icon
+              name={
+                connectionTest.status === "success"
+                  ? "shield"
+                  : connectionTest.status === "error"
+                    ? "alert"
+                    : "sync"
+              }
+            />
             <div>
-              <strong>{connectionTest.status === "testing" ? "Testando conexão" : connectionTest.status === "success" ? "Conexão saudável" : connectionTest.status === "error" ? "Não foi possível confirmar" : "Verificação recomendada"}</strong>
-              <span>{connectionTest.message}{connectionTest.testedAt ? ` · ${formatDate(connectionTest.testedAt)}` : ""}</span>
+              <strong>
+                {connectionTest.status === "testing"
+                  ? "Testando conexão"
+                  : connectionTest.status === "success"
+                    ? "Conexão saudável"
+                    : connectionTest.status === "error"
+                      ? "Não foi possível confirmar"
+                      : "Verificação recomendada"}
+              </strong>
+              <span>
+                {connectionTest.message}
+                {connectionTest.testedAt
+                  ? ` · ${formatDate(connectionTest.testedAt)}`
+                  : ""}
+              </span>
             </div>
           </div>
           <div className="settings-actions">
-            <button className="primary" disabled={busy || storageLoading || !online} onClick={onTest}>
-              <Icon name="sync" /> {storageLoading ? "Testando..." : "Testar conexão"}
+            <button
+              className="primary"
+              disabled={busy || storageLoading || !online}
+              onClick={onTest}
+            >
+              <Icon name="sync" />{" "}
+              {storageLoading ? "Testando..." : "Testar conexão"}
             </button>
-            <button className="outline" disabled={busy || !online} onClick={onConnect}>
-              <Icon name="cloud" /> {connected ? "Trocar OneDrive" : "Conectar OneDrive"}
+            <button
+              className="outline"
+              disabled={busy || !online}
+              onClick={onConnect}
+            >
+              <Icon name="cloud" />{" "}
+              {connected ? "Trocar OneDrive" : "Conectar OneDrive"}
             </button>
           </div>
         </section>
 
         <section className="panel settings-details">
           <div className="settings-section-title">
-            <div><small>CADASTRO</small><h3>Dados da empresa</h3></div>
+            <div>
+              <small>CADASTRO</small>
+              <h3>Dados da empresa</h3>
+            </div>
           </div>
           <dl>
-            <div><dt>Administrador</dt><dd>{company?.adminEmail || profile.email}</dd></div>
-            <div><dt>Sua permissão</dt><dd>{profile.role === "superadmin" ? "Administrador geral" : "Administrador da empresa"}</dd></div>
-            <div><dt>Criada em</dt><dd>{company?.createdAt ? formatDate(company.createdAt.toDate()) : "Data não disponível"}</dd></div>
-            <div><dt>Identificador</dt><dd className="settings-company-id">{company?.id || profile.companyId}</dd></div>
+            <div>
+              <dt>Administrador</dt>
+              <dd>{company?.adminEmail || profile.email}</dd>
+            </div>
+            <div>
+              <dt>Sua permissão</dt>
+              <dd>
+                {profile.role === "superadmin"
+                  ? "Administrador geral"
+                  : "Administrador da empresa"}
+              </dd>
+            </div>
+            <div>
+              <dt>Criada em</dt>
+              <dd>
+                {company?.createdAt
+                  ? formatDate(company.createdAt.toDate())
+                  : "Data não disponível"}
+              </dd>
+            </div>
+            <div>
+              <dt>Identificador</dt>
+              <dd className="settings-company-id">
+                {company?.id || profile.companyId}
+              </dd>
+            </div>
           </dl>
-          <p className="settings-note">A troca do OneDrive altera a conta oficial usada por toda a empresa. Faça essa ação somente quando necessário.</p>
+          <p className="settings-note">
+            A troca do OneDrive altera a conta oficial usada por toda a empresa.
+            Faça essa ação somente quando necessário.
+          </p>
         </section>
       </div>
     </section>
   );
 }
 
-function HistoryList({ items, companyId, canClear, online }: {
-  items: HistoryRecord[]; companyId: string; canClear: boolean; online: boolean;
+function HistoryList({
+  items,
+  companyId,
+  canClear,
+  online,
+}: {
+  items: HistoryRecord[];
+  companyId: string;
+  canClear: boolean;
+  online: boolean;
 }) {
   const dialog = useDialog();
   const [visibleCount, setVisibleCount] = useState(30);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const clearing = useRef(false);
-  const companyItems = items.filter(item => item.companyId === companyId);
+  const companyItems = items.filter((item) => item.companyId === companyId);
   const visibleItems = companyItems.slice(0, visibleCount);
 
   async function clearHistory(scope: "old" | "all") {
@@ -3689,14 +4208,24 @@ function HistoryList({ items, companyId, canClear, online }: {
     try {
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
       // Freeze the confirmed IDs: events created during confirmation are preserved.
-      const selected = companyItems.filter(item => scope === "all" ||
-        (item.createdAt && item.createdAt.toMillis() < cutoff));
+      const selected = companyItems.filter(
+        (item) =>
+          scope === "all" ||
+          (item.createdAt && item.createdAt.toMillis() < cutoff),
+      );
       if (!selected.length) {
-        setMessage(scope === "old" ? "Não há atividades com mais de 30 dias." : "O histórico já está vazio.");
+        setMessage(
+          scope === "old"
+            ? "Não há atividades com mais de 30 dias."
+            : "O histórico já está vazio.",
+        );
         return;
       }
       const confirmation = await dialog.prompt({
-        title: scope === "old" ? "Limpar atividades antigas?" : "Limpar todo o histórico?",
+        title:
+          scope === "old"
+            ? "Limpar atividades antigas?"
+            : "Limpar todo o histórico?",
         message: `Serão excluídos definitivamente ${selected.length} registro(s) da empresa atual${scope === "old" ? " com mais de 30 dias" : ""}. Fotos, pastas e arquivos do OneDrive não serão apagados. Relatórios de uso e última sincronização deixarão de considerar esses registros. Esta ação não pode ser desfeita. Digite LIMPAR para confirmar.`,
         placeholder: "LIMPAR",
         confirmText: "Apagar registros",
@@ -3705,9 +4234,15 @@ function HistoryList({ items, companyId, canClear, online }: {
       if (confirmation !== "LIMPAR") return;
       const count = await deleteHistoryRecords(companyId, selected);
       setVisibleCount(30);
-      setMessage(`${count} registro(s) do lote confirmado removido(s). Fotos e pastas foram preservadas.`);
+      setMessage(
+        `${count} registro(s) do lote confirmado removido(s). Fotos e pastas foram preservadas.`,
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível limpar o histórico.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível limpar o histórico.",
+      );
     } finally {
       clearing.current = false;
       setBusy(false);
@@ -3717,40 +4252,82 @@ function HistoryList({ items, companyId, canClear, online }: {
   return (
     <section className="panel list-panel">
       <div className="panel-title">
-        <div><small>ATIVIDADE</small><h3>Histórico de atividades</h3></div>
+        <div>
+          <small>ATIVIDADE</small>
+          <h3>Histórico de atividades</h3>
+        </div>
       </div>
       {canClear && (
         <details style={{ marginBottom: 16 }}>
-          <summary style={{ cursor: "pointer", padding: "12px 0" }}>Limpar histórico</summary>
+          <summary style={{ cursor: "pointer", padding: "12px 0" }}>
+            Limpar histórico
+          </summary>
           <p style={{ color: "#aab2b6", fontSize: 13, lineHeight: 1.5 }}>
-            Remove somente atividades. A limpeza é definitiva e também afeta os relatórios de uso e a indicação da última sincronização.
+            Remove somente atividades. A limpeza é definitiva e também afeta os
+            relatórios de uso e a indicação da última sincronização.
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <button className="outline" style={{ minHeight: 44 }} disabled={busy || !online || !companyItems.length}
-              onClick={() => void clearHistory("old")}>Limpar registros com mais de 30 dias</button>
-            <button className="danger-action" style={{ minHeight: 44 }} disabled={busy || !online || !companyItems.length}
-              onClick={() => void clearHistory("all")}>Limpar todo o histórico</button>
+            <button
+              className="outline"
+              style={{ minHeight: 44 }}
+              disabled={busy || !online || !companyItems.length}
+              onClick={() => void clearHistory("old")}
+            >
+              Limpar registros com mais de 30 dias
+            </button>
+            <button
+              className="danger-action"
+              style={{ minHeight: 44 }}
+              disabled={busy || !online || !companyItems.length}
+              onClick={() => void clearHistory("all")}
+            >
+              Limpar todo o histórico
+            </button>
           </div>
           {!online && <p>Conecte-se à internet para limpar o histórico.</p>}
         </details>
       )}
-      <p role="status" aria-live="polite">{busy ? "Aguardando confirmação ou concluindo limpeza..." : message}</p>
+      <p role="status" aria-live="polite">
+        {busy ? "Aguardando confirmação ou concluindo limpeza..." : message}
+      </p>
       <p style={{ color: "#aab2b6", fontSize: 13 }}>
         Mostrando {visibleItems.length} de {companyItems.length} atividade(s)
       </p>
-      {visibleItems.length ? visibleItems.map(item => (
-        <div className="history-row" key={item.id}>
-          <span className="file-icon"><Icon name={item.action === "photo_registered" || item.action === "photo_uploaded" ? "image" : "folder"} /></span>
-          <div><strong>{item.title}</strong><small>{item.detail}</small></div>
-          <time>{formatDate(item.createdAt?.toDate())}</time>
-        </div>
-      )) : (
-        <EmptyState icon="clock" title="Nenhuma atividade registrada"
-          detail="As novas ações da equipe aparecerão aqui automaticamente." />
+      {visibleItems.length ? (
+        visibleItems.map((item) => (
+          <div className="history-row" key={item.id}>
+            <span className="file-icon">
+              <Icon
+                name={
+                  item.action === "photo_registered" ||
+                  item.action === "photo_uploaded"
+                    ? "image"
+                    : "folder"
+                }
+              />
+            </span>
+            <div>
+              <strong>{item.title}</strong>
+              <small>{item.detail}</small>
+            </div>
+            <time>{formatDate(item.createdAt?.toDate())}</time>
+          </div>
+        ))
+      ) : (
+        <EmptyState
+          icon="clock"
+          title="Nenhuma atividade registrada"
+          detail="As novas ações da equipe aparecerão aqui automaticamente."
+        />
       )}
       {companyItems.length > visibleCount && (
-        <button className="outline" style={{ minHeight: 44, marginTop: 16, width: "100%" }}
-          onClick={() => setVisibleCount(count => count + 30)}>Carregar mais 30 atividades</button>
+        <button
+          className="outline"
+          style={{ minHeight: 44, marginTop: 16, width: "100%" }}
+          onClick={() => setVisibleCount((count) => count + 30)}
+        >
+          Carregar mais 30 atividades
+        </button>
       )}
     </section>
   );
@@ -4336,7 +4913,11 @@ function UsersAdmin({
       await changeUserRole(uid, role, companyId, currentUid);
       setMessage("Permissão atualizada com sucesso.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar esta permissão.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar esta permissão.",
+      );
     }
   }
   async function setDetailedPermission(
@@ -4557,7 +5138,9 @@ function CompaniesAdmin({ currentUid }: { currentUid: string }) {
       await createCompany(name, adminEmail, currentUid);
       setName("");
       setAdminEmail("");
-      setMessage("Empresa criada. O administrador convidado deve entrar, confirmar o e-mail e aguardar sua aprovação.");
+      setMessage(
+        "Empresa criada. O administrador convidado deve entrar, confirmar o e-mail e aguardar sua aprovação.",
+      );
     } catch (error) {
       setMessage(
         error instanceof Error
