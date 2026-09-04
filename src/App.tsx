@@ -188,7 +188,7 @@ export default function App() {
     let active = true,
       splashTimer = window.setTimeout(() => {
         if (active) setSplashVisible(false);
-      }, 1600);
+      }, 2500);
     unsubscribeAuth = onAuthStateChanged(auth, (current) => {
       unsubscribeProfile();
       setUser(current);
@@ -201,7 +201,7 @@ export default function App() {
       setSplashVisible(true);
       splashTimer = window.setTimeout(() => {
         if (active) setSplashVisible(false);
-      }, 1600);
+      }, 2500);
       setLoading(false);
       unsubscribeProfile = watchUserProfile(current.uid, (nextProfile) => {
         if (active) setProfile(nextProfile);
