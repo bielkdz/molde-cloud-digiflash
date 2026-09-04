@@ -30,6 +30,74 @@ button,
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Resposta visual consistente sem aumentar a quantidade de elementos. */
+:where(
+  .primary,
+  .outline,
+  .sync-button,
+  .danger-action,
+  .remove-action,
+  .remove-user,
+  .folder-actions button,
+  .file-actions button,
+  .mobile-more-button,
+  .notification-button,
+  .user-chip,
+  .mobile-menu,
+  .collapse
+) {
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease;
+}
+
+:where(
+  .primary,
+  .outline,
+  .sync-button,
+  .danger-action,
+  .remove-action,
+  .remove-user,
+  .folder-actions button,
+  .file-actions button,
+  .mobile-more-button,
+  .notification-button,
+  .user-chip,
+  .mobile-menu,
+  .collapse
+):active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+:where(
+  .mobile-more-button,
+  .notification-button,
+  .user-chip,
+  .mobile-menu,
+  .collapse
+):focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 4px rgba(39, 217, 220, 0.2);
+}
+
+:where(.mobile-more-button, .notification-button, .mobile-menu, .collapse) svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
+}
+
+@media (hover: hover) {
+  :where(.mobile-more-button, .notification-button, .user-chip, .mobile-menu, .collapse):hover {
+    border-color: rgba(83, 224, 226, 0.72);
+    background-color: #20272a;
+    color: #f5ffff;
+    filter: brightness(1.06);
+  }
+}
+
 @media (max-width: 680px) {
   .workspace,
   .is-collapsed .workspace {
