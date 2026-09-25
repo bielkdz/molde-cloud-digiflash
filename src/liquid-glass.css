@@ -1,0 +1,419 @@
+/* Molde Cloud — tema Liquid Glass equilibrado (Opção 1).
+   Camada visual isolada para permitir reversão sem tocar na lógica do produto. */
+:root {
+  --glass-bg: rgba(12, 22, 34, 0.72);
+  --glass-bg-strong: rgba(8, 15, 25, 0.88);
+  --glass-line: rgba(114, 195, 255, 0.24);
+  --glass-line-strong: rgba(74, 224, 255, 0.56);
+  --glass-cyan: #2ee8f0;
+  --glass-blue: #4d8cff;
+  --glass-magenta: #d94cff;
+  --glass-shadow: 0 22px 60px rgba(0, 0, 0, 0.38);
+  --glass-soft-shadow: 0 14px 38px rgba(0, 0, 0, 0.24);
+  --glass-blur: blur(22px) saturate(125%);
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% 8%, rgba(30, 135, 219, 0.25), transparent 31%),
+    radial-gradient(circle at 92% 18%, rgba(176, 49, 232, 0.16), transparent 27%),
+    radial-gradient(circle at 65% 88%, rgba(23, 154, 194, 0.12), transparent 31%),
+    linear-gradient(145deg, #040910 0%, #07111c 48%, #050812 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.5;
+  background:
+    linear-gradient(115deg, transparent 15%, rgba(96, 201, 255, 0.06) 34%, transparent 52%),
+    radial-gradient(ellipse at 50% -15%, rgba(255, 255, 255, 0.07), transparent 47%);
+}
+
+.sidebar {
+  margin: 18px 0 18px 18px;
+  height: calc(100vh - 36px);
+  border: 1px solid var(--glass-line);
+  border-radius: 28px;
+  background:
+    linear-gradient(155deg, rgba(39, 90, 130, 0.2), transparent 35%),
+    var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow), inset 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.sidebar::before,
+.panel::before,
+.capture-card::before,
+.welcome::before,
+.modal::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.09), transparent 28%, transparent 72%, rgba(78, 227, 255, 0.05));
+}
+
+.brand-mark {
+  border-color: rgba(65, 225, 245, 0.74);
+  background: linear-gradient(145deg, rgba(52, 153, 221, 0.22), rgba(172, 65, 231, 0.12));
+  box-shadow: 0 0 0 1px rgba(202, 73, 255, 0.35), 0 0 24px rgba(47, 218, 240, 0.2);
+}
+
+.sidebar nav button,
+.onedrive-button,
+.install-button {
+  border-color: transparent;
+  border-radius: 16px;
+}
+
+.sidebar nav button:hover,
+.onedrive-button:hover,
+.install-button:hover {
+  border-color: rgba(94, 190, 244, 0.22);
+  background: rgba(73, 125, 168, 0.12);
+}
+
+.sidebar nav button.active {
+  border-color: var(--glass-line-strong);
+  background: linear-gradient(115deg, rgba(25, 219, 233, 0.18), rgba(84, 118, 255, 0.14) 55%, rgba(216, 73, 255, 0.15));
+  box-shadow: 0 0 25px rgba(35, 209, 236, 0.12), inset 0 1px rgba(255, 255, 255, 0.09);
+}
+
+.nav-icon {
+  border-color: rgba(124, 173, 210, 0.24);
+  background: rgba(40, 76, 107, 0.16);
+  box-shadow: none;
+}
+
+.sidebar nav button.active .nav-icon {
+  border-color: rgba(81, 230, 244, 0.66);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(38, 221, 239, 0.2);
+}
+
+.workspace {
+  margin-left: 276px;
+  padding-top: 34px;
+}
+
+.is-collapsed .workspace { margin-left: 100px; }
+.is-collapsed .sidebar { width: 66px; }
+
+.workspace > header {
+  position: sticky;
+  top: 18px;
+  z-index: 8;
+  min-height: 68px;
+  margin-bottom: 26px;
+  padding: 12px 16px 12px 20px;
+  border: 1px solid rgba(108, 181, 231, 0.18);
+  border-radius: 21px;
+  background: rgba(6, 14, 23, 0.64);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px) saturate(125%);
+  -webkit-backdrop-filter: blur(18px) saturate(125%);
+}
+
+.workspace h1 {
+  background: linear-gradient(95deg, #ffffff 12%, #cae9ff 55%, #60e8ee 100%);
+  -webkit-background-clip: text;
+}
+
+.welcome,
+.panel,
+.quick,
+.capture-card,
+.folder-grid article,
+.search-box,
+.report-toolbar,
+.system-health,
+.error-summary-grid article {
+  position: relative;
+  border-color: var(--glass-line);
+  background:
+    linear-gradient(145deg, rgba(42, 88, 125, 0.16), transparent 42%),
+    var(--glass-bg);
+  box-shadow: var(--glass-soft-shadow), inset 0 1px rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+}
+
+.welcome {
+  border-radius: 25px;
+  background:
+    radial-gradient(circle at 88% 15%, rgba(200, 71, 255, 0.16), transparent 28%),
+    linear-gradient(120deg, rgba(35, 172, 210, 0.14), rgba(37, 73, 111, 0.08) 48%, rgba(138, 53, 188, 0.08)),
+    rgba(7, 16, 26, 0.76);
+  overflow: hidden;
+}
+
+.welcome::after {
+  content: "";
+  position: absolute;
+  right: -10%;
+  bottom: -60%;
+  width: 44%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(42, 226, 239, 0.16), transparent 68%);
+  filter: blur(5px);
+}
+
+.stats article {
+  border-color: rgba(111, 181, 224, 0.18);
+  background: rgba(9, 19, 29, 0.72);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(14px);
+}
+
+.primary {
+  min-height: 48px;
+  border: 1px solid rgba(165, 240, 255, 0.42);
+  border-radius: 15px;
+  background: linear-gradient(105deg, #19dce7 0%, #4a78f3 56%, #d348ed 100%);
+  box-shadow: 0 10px 30px rgba(55, 112, 241, 0.24), 0 0 22px rgba(211, 72, 238, 0.12), inset 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 13px 34px rgba(40, 181, 225, 0.28), 0 0 25px rgba(211, 72, 238, 0.16), inset 0 1px rgba(255, 255, 255, 0.32);
+}
+
+.outline,
+.sync-button,
+.notification-button,
+.user-chip,
+.status,
+.mobile-more-button {
+  border-color: rgba(115, 184, 225, 0.25);
+  background: rgba(15, 29, 43, 0.64);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(12px);
+}
+
+.camera-area {
+  border-color: rgba(84, 215, 234, 0.42);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(54, 151, 193, 0.12), transparent 42%),
+    rgba(4, 10, 17, 0.78);
+  box-shadow: inset 0 0 48px rgba(26, 107, 149, 0.08);
+}
+
+.camera-icon {
+  border-color: rgba(57, 230, 238, 0.78);
+  background: rgba(29, 121, 165, 0.18);
+  box-shadow: 0 0 0 1px rgba(211, 66, 242, 0.32), 0 0 26px rgba(45, 218, 239, 0.18);
+}
+
+.modal,
+.app-dialog,
+.notification-menu,
+.onedrive-menu,
+.profile-menu,
+.action-sheet {
+  border-color: rgba(109, 190, 235, 0.28);
+  background:
+    linear-gradient(145deg, rgba(46, 94, 133, 0.17), transparent 42%),
+    rgba(6, 14, 23, 0.92);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58), inset 0 1px rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(24px) saturate(125%);
+  -webkit-backdrop-filter: blur(24px) saturate(125%);
+}
+
+@media (max-width: 680px) {
+  body {
+    background:
+      radial-gradient(circle at 55% -5%, rgba(29, 137, 217, 0.28), transparent 30%),
+      radial-gradient(circle at 100% 26%, rgba(171, 54, 228, 0.14), transparent 26%),
+      linear-gradient(165deg, #040a12, #07111c 55%, #050812);
+  }
+
+  .workspace,
+  .is-collapsed .workspace {
+    margin-left: 0;
+    padding: calc(16px + env(safe-area-inset-top)) 14px calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .workspace > header {
+    top: 8px;
+    min-height: 58px;
+    margin: 0 0 18px 54px;
+    padding: 9px 11px 9px 14px;
+    border-radius: 18px;
+  }
+
+  .mobile-menu {
+    top: calc(17px + env(safe-area-inset-top));
+    left: 14px;
+    width: 44px;
+    height: 44px;
+    border-color: rgba(82, 218, 237, 0.45);
+    border-radius: 14px;
+    background: rgba(8, 20, 31, 0.78);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(15px);
+  }
+
+  .welcome,
+  .panel,
+  .quick,
+  .capture-card {
+    border-radius: 20px;
+  }
+
+  .dashboard .welcome {
+    min-height: 280px;
+    padding: 24px 20px;
+  }
+
+  .dashboard .welcome h2 {
+    font-size: clamp(30px, 10vw, 40px);
+    line-height: 0.98;
+  }
+
+  .dashboard .welcome p {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .dashboard .welcome .primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dashboard .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+
+  .dashboard .stats article {
+    min-height: 104px;
+    padding: 13px;
+    border-radius: 17px;
+  }
+
+  .dashboard .lower-grid {
+    gap: 11px;
+  }
+
+  .screen-capture .capture-card {
+    padding: 15px;
+  }
+
+  .camera-area {
+    min-height: 280px;
+    border-radius: 18px;
+  }
+
+  .folder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Quando recolhido, o menu principal se torna uma barra inferior.
+     O botão superior ainda abre o menu completo para Administração e ajustes. */
+  .app-shell.is-collapsed .sidebar {
+    position: fixed;
+    inset: auto 8px calc(8px + env(safe-area-inset-bottom));
+    z-index: 100;
+    width: auto;
+    height: 76px;
+    margin: 0;
+    padding: 7px 8px;
+    transform: none;
+    border-radius: 22px;
+    overflow: visible;
+  }
+
+  .app-shell.is-collapsed .sidebar .brand,
+  .app-shell.is-collapsed .sidebar .collapse,
+  .app-shell.is-collapsed .sidebar .admin-nav-group,
+  .app-shell.is-collapsed .sidebar .install-button,
+  .app-shell.is-collapsed .sidebar .onedrive-button {
+    display: none !important;
+  }
+
+  .app-shell.is-collapsed .sidebar nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
+    width: 100%;
+    height: 100%;
+  }
+
+  .app-shell.is-collapsed .sidebar nav > button {
+    width: 100%;
+    height: 62px;
+    min-height: 62px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    padding: 4px 2px;
+    border-radius: 16px;
+  }
+
+  .app-shell.is-collapsed .sidebar .nav-icon {
+    width: 27px;
+    height: 27px;
+    border: 0;
+    background: transparent;
+  }
+
+  .app-shell.is-collapsed .sidebar .nav-icon svg {
+    width: 21px;
+    height: 21px;
+  }
+
+  .app-shell.is-collapsed .sidebar .nav-label,
+  .app-shell.is-collapsed .sidebar .is-collapsed .nav-label {
+    display: block !important;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 9px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell.is-collapsed .sidebar nav > button.active {
+    border-color: rgba(64, 225, 241, 0.52);
+    background: linear-gradient(140deg, rgba(30, 215, 229, 0.19), rgba(104, 91, 242, 0.16), rgba(207, 68, 237, 0.17));
+  }
+
+  .app-shell:not(.is-collapsed) .sidebar {
+    margin: 0;
+    height: 100dvh;
+    border-top: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 0 26px 26px 0;
+  }
+
+  .quick-camera-button {
+    bottom: calc(94px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
+  .sidebar,
+  .workspace > header,
+  .panel,
+  .quick,
+  .capture-card,
+  .welcome,
+  .modal,
+  .app-dialog {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: #0b1420;
+  }
+}
