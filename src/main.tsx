@@ -10,6 +10,7 @@ import "./loading-wave.css";
 import "./company-settings.css";
 import "./mobile-polish.css";
 import "./presentation-mode.css";
+import "./liquid-glass.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DialogProvider>
