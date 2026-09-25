@@ -27,15 +27,14 @@ jobs:
       - run: npm run build
         env:
           VITE_MICROSOFT_CLIENT_ID: "${{ vars.VITE_MICROSOFT_CLIENT_ID }}"
+      - name: Autenticar prévia temporária
+        if: github.event_name == 'pull_request'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"
       - name: Publicar prévia temporária do pull request
         if: github.event_name == 'pull_request'
-        uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: "${{ secrets.GITHUB_TOKEN }}"
-          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"
-          projectId: moldes-cloud-digiflash
-          channelId: liquid-glass-pr-50
-          expires: 1d
+        run: npx firebase-tools hosting:channel:deploy liquid-glass-pr-50 --expires 1d --project moldes-cloud-digiflash
       - uses: google-github-actions/auth@v2
         if: github.event_name == 'push'
         with:
