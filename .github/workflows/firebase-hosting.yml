@@ -27,9 +27,15 @@ jobs:
       - run: npm run build
         env:
           VITE_MICROSOFT_CLIENT_ID: "${{ vars.VITE_MICROSOFT_CLIENT_ID }}"
-      - name: Encerrar após validar pull request
+      - name: Publicar prévia temporária do pull request
         if: github.event_name == 'pull_request'
-        run: echo "Build validado; a publicação ocorre somente após o merge na main."
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOLDES_CLOUD_DIGIFLASH }}"
+          projectId: moldes-cloud-digiflash
+          channelId: liquid-glass-pr-50
+          expires: 1d
       - uses: google-github-actions/auth@v2
         if: github.event_name == 'push'
         with:
